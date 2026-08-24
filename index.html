@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+=<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -103,12 +103,13 @@
     #log {
       position: absolute;
       top: 42px; left: 6px; right: 6px;
-      max-height: 60px;
+      max-height: 80px;
       overflow-y: auto;
-      font-size: 10px;
-      color: #888;
+      font-size: 11px;
+      color: #aaa;
       pointer-events: none;
       z-index: 15;
+      background: rgba(0,0,0,0.5);
     }
     #info {
       position: absolute;
@@ -172,6 +173,7 @@
     <div id="controls">
       <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
       <button onclick="connectToy()">Connect Toy</button>
+      <button onclick="testVibe()">Test Vibe</button>
       <button onclick="startSession()">Start</button>
       <button onclick="cycleVoice()">Voice</button>
       <button onclick="enableMic()">Enable Mic</button>
@@ -230,8 +232,7 @@
 
     function showReplyButtons(which) {
       waitingFor = which;
-      const box = document.getElementById("reply-buttons");
-      box.style.display = "flex";
+      document.getElementById("reply-buttons").style.display = "flex";
       document.getElementById("btn-yes").style.display = which === "yes" ? "block" : "none";
       document.getElementById("btn-in").style.display = which === "in" ? "block" : "none";
       document.getElementById("btn-thanks").style.display = which === "thanks" ? "block" : "none";
@@ -247,29 +248,20 @@
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return false;
-
       recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = "en-US";
-      recognition.maxAlternatives = 3;
-
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript.toLowerCase();
         log("Heard: " + transcript);
         if (!waitingFor) return;
-        if (waitingFor === "yes" && (transcript.includes("yes") || transcript.includes("mistress") || transcript.includes("yeah"))) reply("yes");
-        else if (waitingFor === "in" && (transcript.includes("in") || transcript.includes("it is") || transcript.includes("inside"))) reply("in");
-        else if (waitingFor === "thanks" && (transcript.includes("thank") || transcript.includes("thanks"))) reply("thanks");
+        if (waitingFor === "yes" && (transcript.includes("yes") || transcript.includes("mistress"))) reply("yes");
+        else if (waitingFor === "in" && (transcript.includes("in") || transcript.includes("it is"))) reply("in");
+        else if (waitingFor === "thanks" && transcript.includes("thank")) reply("thanks");
       };
-      recognition.onerror = (e) => {
-        isListening = false;
-        if (waitingFor && e.error !== "aborted") setTimeout(startListening, 600);
-      };
-      recognition.onend = () => {
-        isListening = false;
-        if (waitingFor) setTimeout(startListening, 400);
-      };
+      recognition.onerror = () => { isListening = false; if (waitingFor) setTimeout(startListening, 600); };
+      recognition.onend = () => { isListening = false; if (waitingFor) setTimeout(startListening, 400); };
       return true;
     }
 
@@ -286,7 +278,7 @@
 
     function startListening() {
       if (!recognition || isListening || !waitingFor) return;
-      try { recognition.start(); isListening = true; } catch (e) { setTimeout(startListening, 800); }
+      try { recognition.start(); isListening = true; } catch(e) { setTimeout(startListening, 800); }
     }
     function stopListening() {
       if (recognition && isListening) { try { recognition.stop(); } catch(e){} isListening = false; }
@@ -322,13 +314,36 @@
     function play(key) {
       return new Promise((resolve) => {
         const file = LINES[key];
-        if (!file) { resolve(); return; }
-        if (audio) { audio.pause(); audio = null; }
-        audio = new Audio(`audio/${VOICES[currentVoice]}/${file}`);
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
-        audio.play().catch(() => resolve());
-        log("▶ " + key);
+        if (!file) {
+          log("No file for key: " + key);
+          resolve();
+          return;
+        }
+
+        if (audio) {
+          audio.pause();
+          audio = null;
+        }
+
+        const path = `audio/${VOICES[currentVoice]}/${file}`;
+        log("Trying: " + path);
+
+        audio = new Audio(path);
+
+        audio.onended = () => {
+          log("Finished: " + key);
+          resolve();
+        };
+
+        audio.onerror = () => {
+          log("FAILED to load: " + path);
+          resolve();
+        };
+
+        audio.play().catch((e) => {
+          log("Play error: " + e.message);
+          resolve();
+        });
       });
     }
 
@@ -358,8 +373,31 @@
     }
 
     async function vibe(intensity) {
-      if (!device) return;
-      try { await device.vibrate(Math.max(0, Math.min(1, intensity))); } catch(e){}
+      if (!device) {
+        log("No device");
+        return;
+      }
+      intensity = Math.max(0, Math.min(1, intensity));
+      log("Vibe → " + intensity.toFixed(2));
+      try {
+        await device.vibrate(intensity);
+      } catch (e1) {
+        try {
+          await device.scalar([{ Index: 0, Scalar: intensity, ActuatorType: "Vibrate" }]);
+        } catch (e2) {
+          try {
+            await device.vibrate([intensity, intensity]);
+          } catch (e3) {
+            log("Vibration failed");
+          }
+        }
+      }
+    }
+
+    async function testVibe() {
+      log("Testing vibration...");
+      await vibe(0.8);
+      setTimeout(() => vibe(0), 2500);
     }
 
     async function stopAll() {
@@ -379,7 +417,6 @@
         const source = ctx.createMediaStreamSource(micStream);
         analyser = ctx.createAnalyser();
         analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.2;
         source.connect(analyser);
         detectSlaps();
       } catch(e){}
@@ -419,18 +456,14 @@
     nose.addEventListener("touchstart", async e => {
       e.preventDefault();
       if (phase !== "training" && phase !== "ending") return;
-
       isHolding = true;
       holdStart = Date.now();
       nose.classList.add("active");
-
       timerEl.style.display = "block";
       timerEl.textContent = "0.0s";
       holdTimerInterval = setInterval(() => {
-        const sec = ((Date.now() - holdStart) / 1000).toFixed(1);
-        timerEl.textContent = sec + "s";
+        timerEl.textContent = ((Date.now() - holdStart)/1000).toFixed(1) + "s";
       }, 100);
-
       await vibe(phase === "ending" ? 1.0 : 0.55);
     });
 
@@ -439,7 +472,6 @@
       if (!isHolding) return;
       isHolding = false;
       nose.classList.remove("active");
-
       clearInterval(holdTimerInterval);
       timerEl.style.display = "none";
 
@@ -549,11 +581,12 @@
     window.reply = reply;
     window.cycleVoice = cycleVoice;
     window.connectToy = connectToy;
+    window.testVibe = testVibe;
     window.enableMic = enableMic;
     window.stopAll = stopAll;
     window.changeSlaps = changeSlaps;
 
-    log("Ready");
+    log("Ready - check log for audio paths");
   </script>
 </body>
 </html>
