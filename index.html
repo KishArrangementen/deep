@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
+  <title>Deepthroat Trainer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      color: #eee;
+      font-family: system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    #app { height: 100%; display: flex; flex-direction: column; }
+    #status {
+      padding: 8px 12px;
+      background: #111;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    #main {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 18%;
+    }
+    #nose-btn {
+      width: min(170px, 42vw);
+      height: min(170px, 42vw);
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #ff4d6d, #9b1b30);
+      border: 3px solid #ff8fa3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      font-weight: 600;
+      text-align: center;
+      box-shadow: 0 0 30px rgba(255, 77, 109, 0.45);
+      z-index: 20;
+      transition: 0.1s;
+      position: relative;
+    }
+    #nose-btn.active {
+      transform: scale(0.93);
+      box-shadow: 0 0 50px rgba(255, 77, 109, 0.9);
+    }
+    #dead-zone {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 38%;
+      background: repeating-linear-gradient(45deg, #111 0 10px, #1a1a1a 10px 20px);
+      opacity: 0.7;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #555;
+      z-index: 5;
+    }
+    #controls {
+      padding: 8px;
+      background: #111;
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    #controls button {
+      background: #222;
+      color: #eee;
+      border: 1px solid #444;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    #log {
+      position: absolute;
+      top: 42px; left: 6px; right: 6px;
+      max-height: 70px;
+      overflow-y: auto;
+      font-size: 10px;
+      color: #888;
+      pointer-events: none;
+      z-index: 15;
+    }
+    #info {
+      position: absolute;
+      bottom: 42%;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 14px;
+      color: #ccc;
+      z-index: 8;
+      padding: 0 12px;
+    }
+    #reply-buttons {
+      position: absolute;
+      bottom: 40%;
+      left: 0; right: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 25;
+      padding: 0 16px;
+    }
+    #reply-buttons button {
+      width: 100%;
+      max-width: 300px;
+      padding: 14px 12px;
+      font-size: 16px;
+      font-weight: 600;
+      background: #2a1a1a;
+      border: 2px solid #ff4d6d;
+      color: #fff;
+      border-radius: 12px;
+    }
+    #reply-buttons button:active { background: #ff4d6d; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="status">
+      <span id="phase">Idle</span>
+      <span id="score">Score: 0</span>
+      <span id="toy-status">Toy: —</span>
+      <span id="voice-label">Domi</span>
+    </div>
+
+    <div id="log"></div>
+    <div id="info"></div>
+
+    <div id="reply-buttons">
+      <button id="btn-yes" onclick="reply('yes')">Yes, Mistress</button>
+      <button id="btn-in" onclick="reply('in')">It is in</button>
+      <button id="btn-thanks" onclick="reply('thanks')">Thank you, Mistress</button>
+    </div>
+
+    <div id="main">
+      <div id="nose-btn">NOSE<br>BUTTON</div>
+      <div id="dead-zone">DILDO BASE ZONE (dead)</div>
+    </div>
+
+    <div id="controls">
+      <button onclick="startSession()">Start</button>
+      <button onclick="cycleVoice()">Voice</button>
+      <button onclick="connectToy()">Connect Toy</button>
+      <button onclick="enableMic()">Enable Mic</button>
+      <button onclick="stopAll()">Stop</button>
+      <button onclick="changeSlaps()">Slaps: <span id="slap-num">5</span></button>
+    </div>
+  </div>
+
+  <script type="module">
+    import {
+      ButtplugClient,
+      ButtplugBrowserWebsocketClientConnector
+    } from "https://cdn.jsdelivr.net/npm/buttplug@5/dist/web/buttplug.mjs";
+
+    const VOICES = ["domi", "charlotte", "rachel"];
+    let currentVoice = 0;
+    let slapTarget = 5;
+
+    let client = null;
+    let device = null;
+    let audio = null;
+    let phase = "idle";
+    let score = 0;
+    let isHolding = false;
+    let holdStart = 0;
+    let slapCount = 0;
+    let waitingFor = null;
+
+    let micStream = null;
+    let analyser = null;
+    let lastSlapTime = 0;
+    let prevEnergy = 0;
+
+    let recognition = null;
+    let isListening = false;
+
+    function log(msg) {
+      const el = document.getElementById("log");
+      el.innerHTML = msg + "<br>" + el.innerHTML;
+    }
+    function setPhase(p) {
+      phase = p;
+      document.getElementById("phase").textContent = p.toUpperCase();
+    }
+    function setScore(s) {
+      score = Math.max(0, s);
+      document.getElementById("score").textContent = "Score: " + score;
+    }
+    function setInfo(text) {
+      document.getElementById("info").textContent = text || "";
+    }
+    function setToyStatus(t) {
+      document.getElementById("toy-status").textContent = "Toy: " + t;
+    }
+
+    function showReplyButtons(which) {
+      waitingFor = which;
+      const box = document.getElementById("reply-buttons");
+      box.style.display = "flex";
+      document.getElementById("btn-yes").style.display = which === "yes" ? "block" : "none";
+      document.getElementById("btn-in").style.display = which === "in" ? "block" : "none";
+      document.getElementById("btn-thanks").style.display = which === "thanks" ? "block" : "none";
+      startListening();
+    }
+
+    function hideReplyButtons() {
+      waitingFor = null;
+      document.getElementById("reply-buttons").style.display = "none";
+      stopListening();
+    }
+
+    function initSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        log("Speech Recognition not supported");
+        return false;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+      recognition.maxAlternatives = 3;
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript.toLowerCase();
+        log("Heard: " + transcript);
+
+        if (!waitingFor) return;
+
+        if (waitingFor === "yes" && (transcript.includes("yes") || transcript.includes("mistress") || transcript.includes("yeah"))) {
+          reply("yes");
+        }
+        else if (waitingFor === "in" && (transcript.includes("in") || transcript.includes("it is") || transcript.includes("inside"))) {
+          reply("in");
+        }
+        else if (waitingFor === "thanks" && (transcript.includes("thank") || transcript.includes("thanks"))) {
+          reply("thanks");
+        }
+      };
+
+      recognition.onerror = (e) => {
+        log("Speech error: " + e.error);
+        isListening = false;
+        if (waitingFor && e.error !== "aborted") {
+          setTimeout(startListening, 600);
+        }
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        if (waitingFor) {
+          setTimeout(startListening, 400);
+        }
+      };
+
+      return true;
+    }
+
+    async function enableMic() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        log("Microphone permission granted");
+
+        if (!recognition) {
+          const ok = initSpeech();
+          if (!ok) {
+            alert("Speech recognition not supported on this browser. Use the buttons.");
+            return;
+          }
+        }
+        alert("Microphone ready! You can now answer by voice.");
+      } catch (e) {
+        log("Mic permission denied: " + e.message);
+        alert("Please allow microphone access.");
+      }
+    }
+
+    function startListening() {
+      if (!recognition || isListening || !waitingFor) return;
+      try {
+        recognition.start();
+        isListening = true;
+        log("Listening for answer...");
+      } catch (e) {
+        setTimeout(startListening, 800);
+      }
+    }
+
+    function stopListening() {
+      if (recognition && isListening) {
+        try { recognition.stop(); } catch (e) {}
+        isListening = false;
+      }
+    }
+
+    const LINES = {
+      look: "001_look_at_me_listen_carefully.mp3",
+      lube: "002_lube_that_toy_up_nice_and_slow_then_slide_it_into_your_ass_for_me.mp3",
+      goodboy: "003_good_boy.mp3",
+      putin: "004_now_put_it_in_dont_make_me_wait.mp3",
+      thankyou: "005_mmm_good_thank_you_for_taking_my_toy_like_a_good_boy.mp3",
+      welcome: "006_youre_welcome.mp3",
+      expectations: "007_youre_going_to_deepthroat_that_cock_for_me_every_time_your_nose_hits_the_button_you_get_rewarded_the_longer_you_stay_down_the_harder_i_make_the_toy_in_your_ass_vibrate_if_you_choke_i_want_to_hear_it_if_you_pull_off_too_early_no_reward_and_youll_slap_that_ass_until_i_say_youve_had_enough_only_good_performance_earns_the_right_to_cum_understand.mp3",
+      begin: "008_good_begin_when_youre_ready.mp3",
+      reward1: "021_there_it_is_feel_that_thats_yours.mp3",
+      reward2: "022_good_boy_you_earned_that_vibration.mp3",
+      stroke: "027_good_boy_you_earned_it_stroke_that_cock_for_me.mp3",
+      stroke10: "028_you_can_stroke_it_now_ten_seconds.mp3",
+      handsoff: "035_hands_off_now.mp3",
+      fail1: "038_i_didnt_say_you_could_pull_off.mp3",
+      noreward: "040_no_reward_for_that.mp3",
+      slap: "042_slap_your_ass_five_times_hard_i_want_to_hear_it.mp3",
+      enough: "046_good_thats_enough.mp3",
+      backon: "047_now_get_back_on_that_cock_and_do_it_properly.mp3",
+      closer: "056_youre_getting_closer.mp3",
+      almost: "057_almost_there_keep_going.mp3",
+      earned: "066_alright_youve_earned_it.mp3",
+      staydown_end: "067_stay_down_on_that_cock_dont_you_dare_pull_off.mp3",
+      stroke_end: "068_stroke_that_cock_for_me_harder.mp3",
+      choke_end: "069_choke_on_it_while_you_jerk_off_i_want_to_hear_you_struggle.mp3"
+    };
+
+    function play(key) {
+      return new Promise((resolve) => {
+        const file = LINES[key];
+        if (!file) { resolve(); return; }
+        if (audio) { audio.pause(); audio = null; }
+        const path = `audio/${VOICES[currentVoice]}/${file}`;
+        audio = new Audio(path);
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
+        log("▶ " + key);
+      });
+    }
+
+    async function connectToy() {
+      try {
+        client = new ButtplugClient("Deepthroat Trainer");
+        client.addListener("deviceadded", d => {
+          device = d;
+          setToyStatus(d.name);
+          log("Device: " + d.name);
+        });
+        client.addListener("deviceremoved", () => {
+          device = null;
+          setToyStatus("—");
+        });
+
+        // Belangrijk: IP van je pc
+        const connector = new ButtplugBrowserWebsocketClientConnector("ws://192.168.8.168:12345");
+        await client.connect(connector);
+        await client.startScanning();
+        log("Connected + scanning");
+      } catch (e) {
+        log("Connect failed: " + e.message);
+        alert("Start Intiface Central on your PC first");
+      }
+    }
+
+    async function vibe(intensity) {
+      if (!device) return;
+      try {
+        await device.vibrate(Math.max(0, Math.min(1, intensity)));
+      } catch (e) {}
+    }
+
+    async function stopAll() {
+      await vibe(0);
+      if (audio) { audio.pause(); audio = null; }
+      hideReplyButtons();
+      setInfo("");
+      log("Stopped");
+    }
+
+    async function startMic() {
+      try {
+        if (micStream) return;
+        micStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = ctx.createMediaStreamSource(micStream);
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.2;
+        source.connect(analyser);
+        detectSlaps();
+        log("Mic ready for slaps");
+      } catch (e) {
+        log("Mic error: " + e.message);
+      }
+    }
+
+    function detectSlaps() {
+      if (!analyser) {
+        requestAnimationFrame(detectSlaps);
+        return;
+      }
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+      let highEnergy = 0;
+      const startBin = Math.floor(data.length * 0.25);
+      for (let i = startBin; i < data.length; i++) highEnergy += data[i];
+      highEnergy /= (data.length - startBin);
+      const spike = highEnergy - prevEnergy;
+      prevEnergy = highEnergy * 0.7 + prevEnergy * 0.3;
+      const now = Date.now();
+      if (phase === "punishment" && highEnergy > 48 && spike > 18 && now - lastSlapTime > 380) {
+        lastSlapTime = now;
+        slapCount++;
+        log(`Slap ${slapCount}/${slapTarget}`);
+        setInfo(`Slaps: ${slapCount} / ${slapTarget}`);
+        vibe(0.25).then(() => setTimeout(() => vibe(0), 120));
+        if (slapCount >= slapTarget) {
+          play("enough").then(() => {
+            play("backon");
+            setPhase("training");
+            setInfo("Back to training");
+            slapCount = 0;
+          });
+        }
+      }
+      requestAnimationFrame(detectSlaps);
+    }
+
+    const nose = document.getElementById("nose-btn");
+    nose.addEventListener("touchstart", async e => {
+      e.preventDefault();
+      if (phase !== "training" && phase !== "ending") return;
+      isHolding = true;
+      holdStart = Date.now();
+      nose.classList.add("active");
+      await vibe(phase === "ending" ? 1.0 : 0.55);
+    });
+    nose.addEventListener("touchend", async e => {
+      e.preventDefault();
+      if (!isHolding) return;
+      isHolding = false;
+      nose.classList.remove("active");
+      const dur = (Date.now() - holdStart) / 1000;
+      if (phase === "ending") {
+        await vibe(0.7);
+        return;
+      }
+      if (dur < 1.8) {
+        await vibe(0);
+        setScore(score - 3);
+        await play("fail1");
+        await play("noreward");
+        await play("slap");
+        setPhase("punishment");
+        slapCount = 0;
+        setInfo(`Slap your ass ${slapTarget} times`);
+        startMic();
+      } else if (dur >= 9) {
+        await vibe(0.95);
+        setScore(score + 12);
+        await play("stroke");
+        await play("stroke10");
+        setInfo("Stroke for 10 seconds");
+        setTimeout(async () => {
+          await play("handsoff");
+          setInfo("");
+          await vibe(0.35);
+        }, 10000);
+        checkProgress();
+      } else {
+        await vibe(0.75);
+        setScore(score + Math.floor(dur * 1.5));
+        await play(Math.random() > 0.5 ? "reward1" : "reward2");
+        setTimeout(() => vibe(0.3), 3500);
+        checkProgress();
+      }
+    });
+    nose.addEventListener("mousedown", () => nose.dispatchEvent(new Event("touchstart")));
+    nose.addEventListener("mouseup", () => nose.dispatchEvent(new Event("touchend")));
+
+    async function startSession() {
+      setScore(0);
+      setPhase("setup");
+      hideReplyButtons();
+      await play("look");
+      await play("lube");
+      setInfo("Zeg: Yes, Mistress");
+      showReplyButtons("yes");
+    }
+
+    async function reply(type) {
+      if (waitingFor !== type) return;
+      hideReplyButtons();
+      setInfo("");
+      if (type === "yes") {
+        await play("goodboy");
+        await play("putin");
+        setInfo("Zeg: It is in");
+        showReplyButtons("in");
+      } else if (type === "in") {
+        await play("thankyou");
+        setInfo("Zeg: Thank you, Mistress");
+        showReplyButtons("thanks");
+      } else if (type === "thanks") {
+        await play("welcome");
+        await play("expectations");
+        await play("begin");
+        setPhase("training");
+        setInfo("Train. Houd de knop in met je neus.");
+      }
+    }
+
+    function checkProgress() {
+      if (score >= 45 && phase === "training") play("closer");
+      if (score >= 70 && phase === "training") play("almost");
+      if (score >= 95 && phase === "training") {
+        setPhase("ending");
+        play("earned").then(() => {
+          play("staydown_end").then(() => {
+            play("stroke_end").then(() => {
+              play("choke_end");
+              setInfo("Stay down & stroke until you cum");
+              vibe(0.9);
+            });
+          });
+        });
+      }
+    }
+
+    function cycleVoice() {
+      currentVoice = (currentVoice + 1) % VOICES.length;
+      document.getElementById("voice-label").textContent = VOICES[currentVoice];
+    }
+
+    function changeSlaps() {
+      slapTarget = slapTarget === 5 ? 3 : slapTarget === 3 ? 8 : 5;
+      document.getElementById("slap-num").textContent = slapTarget;
+    }
+
+    document.body.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+
+    window.startSession = startSession;
+    window.reply = reply;
+    window.cycleVoice = cycleVoice;
+    window.connectToy = connectToy;
+    window.enableMic = enableMic;
+    window.stopAll = stopAll;
+    window.changeSlaps = changeSlaps;
+
+    log("Ready - GitHub Pages version");
+  </script>
+</body>
+</html>
