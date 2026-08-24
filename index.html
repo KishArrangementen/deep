@@ -77,14 +77,18 @@
       gap: 5px;
       flex-wrap: wrap;
       justify-content: center;
+      align-items: center;
     }
-    #controls button {
+    #controls button, #controls input {
       background: #222;
       color: #eee;
       border: 1px solid #444;
       padding: 8px 10px;
       border-radius: 8px;
       font-size: 12px;
+    }
+    #controls input {
+      width: 120px;
     }
     #log {
       position: absolute;
@@ -155,9 +159,10 @@
     </div>
 
     <div id="controls">
+      <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
+      <button onclick="connectToy()">Connect Toy</button>
       <button onclick="startSession()">Start</button>
       <button onclick="cycleVoice()">Voice</button>
-      <button onclick="connectToy()">Connect Toy</button>
       <button onclick="enableMic()">Enable Mic</button>
       <button onclick="stopAll()">Stop</button>
       <button onclick="changeSlaps()">Slaps: <span id="slap-num">5</span></button>
@@ -284,11 +289,11 @@
         if (!recognition) {
           const ok = initSpeech();
           if (!ok) {
-            alert("Speech recognition not supported on this browser. Use the buttons.");
+            alert("Speech recognition not supported. Use the buttons.");
             return;
           }
         }
-        alert("Microphone ready! You can now answer by voice.");
+        alert("Microphone ready!");
       } catch (e) {
         log("Mic permission denied: " + e.message);
         alert("Please allow microphone access.");
@@ -300,7 +305,7 @@
       try {
         recognition.start();
         isListening = true;
-        log("Listening for answer...");
+        log("Listening...");
       } catch (e) {
         setTimeout(startListening, 800);
       }
@@ -355,6 +360,9 @@
     }
 
     async function connectToy() {
+      const ip = document.getElementById("intiface-ip").value.trim() || "192.168.8.168";
+      const address = `ws://${ip}:12345`;
+
       try {
         client = new ButtplugClient("Deepthroat Trainer");
         client.addListener("deviceadded", d => {
@@ -367,14 +375,14 @@
           setToyStatus("—");
         });
 
-        // Belangrijk: IP van je pc
-        const connector = new ButtplugBrowserWebsocketClientConnector("ws://192.168.8.168:12345");
+        log("Connecting to " + address + " ...");
+        const connector = new ButtplugBrowserWebsocketClientConnector(address);
         await client.connect(connector);
         await client.startScanning();
         log("Connected + scanning");
       } catch (e) {
         log("Connect failed: " + e.message);
-        alert("Start Intiface Central on your PC first");
+        alert("Kan niet verbinden met Intiface.\n\nCheck:\n- Intiface Central draait\n- Server is gestart\n- IP klopt\n- Zelfde wifi");
       }
     }
 
@@ -565,7 +573,7 @@
     window.stopAll = stopAll;
     window.changeSlaps = changeSlaps;
 
-    log("Ready - GitHub Pages version");
+    log("Ready - enter Intiface IP and Connect Toy");
   </script>
 </body>
 </html>
