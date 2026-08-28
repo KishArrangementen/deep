@@ -602,7 +602,19 @@
       waitForMe: "n09_wait_for_me.mp3",
       onButton: "n10_on_the_button.mp3",
       ifYouFail: "n11_if_you_fail.mp3",
-      breathe: "n12_breathe.mp3"
+      breathe: "n12_breathe.mp3",
+      slowIntro: "n13_slow_intro.mp3",
+      slow1: "n14_slow_one.mp3",
+      slow2: "n15_slow_two.mp3",
+      slow3: "n16_slow_three.mp3",
+      fast5: "n17_fast5_intro.mp3",
+      fast4: "n18_fast4_intro.mp3",
+      c1: "n19_one.mp3",
+      c2: "n20_two.mp3",
+      c3: "n21_three.mp3",
+      c4: "n22_four.mp3",
+      c5: "n23_five.mp3",
+      holdIntro: "n24_hold_intro.mp3"
     };
     const POOLS = {
       hold: [10, 11, 13, 17, 18, 19, 20, 21, 22, 145, 146],
@@ -725,6 +737,8 @@
         audio = new Audio(path);
         audio.preload = "auto";
         audio.crossOrigin = "anonymous";
+        audio.preservesPitch = true;
+        audio.playbackRate = 0.86;
         try {
           const src = audioCtx.createMediaElementSource(audio);
           src.connect(voiceGain);
@@ -734,6 +748,13 @@
         audio.onerror = () => { log("FAILED " + path); done(); };
         audio.play().catch((e) => { log("Play error " + e.message); done(); });
       });
+    }
+    function wait(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+    async function playSlow(key) {
+      await play(key);
+      await wait(900);
     }
     function play(key) {
       return playFile(LINES[key]);
@@ -892,7 +913,7 @@
             setPhase("training");
             setInfo(vibeBan > 0 ? "No vibration for the next commands. Wait." : "Wait for her command.");
             slapCount = 0;
-            scheduleNextCommand(3500);
+            scheduleNextCommand(5000);
           });
         }
       }
@@ -906,9 +927,9 @@
       const hold = Math.min(8, 3 + Math.floor(round / 3));
       const deck = [
         { type: "hold", secs: hold, files: [11, 21, 22, 13, 92], info: `Stay down ${hold}s. Don't come up.` },
-        { type: "reps", count: 5, maxGap: 950, minDown: 0.18, maxDown: 1.1, files: [87, 88, 89, 9], info: "5 deepthroats. Fast. No rest." },
-        { type: "reps", count: 4, maxGap: 800, minDown: 0.15, maxDown: 0.9, files: [109, 95, 20], info: "4 quick ones. All the way down." },
-        { type: "slow", count: 3, maxGap: 2800, minDown: 1.1, maxDown: 4, files: [90, 91, 18], info: "3 slow ones. Down, hold, up." },
+        { type: "reps", count: 5, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [87, 88, 89, 9], info: "5 deepthroats. Nose on, off. That's one." },
+        { type: "reps", count: 4, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [109, 95, 20], info: "4 quick ones. Down and off." },
+        { type: "slow", count: 3, maxGap: 4500, minDown: 0.7, maxDown: 5, files: [90, 91, 18], info: "3 slow ones. Down, stay, off." },
         { type: "hold", secs: hold + 1, files: [12, 93, 135], info: `Hold through the count. ${hold + 1}s.` }
       ];
       if (round < 2) return deck[0];
@@ -930,6 +951,12 @@
       if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
       else timerEl.textContent = "0 / " + challenge.count;
       await playFile(lastCommandFile);
+      await wait(700);
+      if (challenge.type === "hold") await playSlow("holdIntro");
+      else if (challenge.type === "slow") await playSlow("slowIntro");
+      else if (challenge.count === 5) await playSlow("fast5");
+      else if (challenge.count === 4) await playSlow("fast4");
+      await wait(400);
       commandActive = true;
     }
 
@@ -1011,7 +1038,7 @@
       checkProgress();
       if (phase === "training") {
         targetHold = Math.min(10, targetHold + (round % 2 === 0 ? 1 : 0));
-        scheduleNextCommand(4200);
+        scheduleNextCommand(5500);
       }
     }
 
@@ -1041,8 +1068,14 @@
             winRound(dur, holdStart - commandIssuedAt);
           }
         }, 120);
+      } else if (challenge.type === "slow") {
+        holdTick = setInterval(() => {
+          if (!isHolding || !commandActive) return;
+          const dur = (Date.now() - holdStart) / 1000;
+          vibe(Math.min(1, 0.3 + dur * 0.25));
+        }, 140);
       } else {
-        vibe(vibePattern(repsDone + 0.4, vibeMode));
+        vibe(0.55 + Math.min(0.35, repsDone * 0.08));
       }
     }
 
@@ -1069,19 +1102,27 @@
         return;
       }
       if (isHolding && holdArmed) return;
-      if ((challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
+      if (repsDone > 0 && (challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
         await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
         return;
       }
       clearTimeout(armTimer);
-      armTimer = setTimeout(beginHold, ARM_MS);
+      if (challenge.type === "hold") {
+        armTimer = setTimeout(beginHold, ARM_MS);
+      } else {
+        beginHold();
+      }
     });
     nose.addEventListener("touchend", async e => {
       e.preventDefault();
-      if (armTimer) {
+      if (challenge && challenge.type === "hold" && armTimer) {
         clearTimeout(armTimer);
         armTimer = null;
         return;
+      }
+      if (armTimer) {
+        clearTimeout(armTimer);
+        armTimer = null;
       }
       if (!isHolding && phase !== "ending") {
         await vibe(0);
@@ -1116,12 +1157,13 @@
       holdArmed = false;
       nose.classList.remove("active");
       clearInterval(holdTick);
-      await vibe(0);
-      if (dur < 0.35) return;
-      if (dur < challenge.minDown) {
-        await failRound("That wasn't all the way down.");
+      vibe(0);
+      if (dur < 0.08) return;
+      if (challenge.type === "slow" && dur < challenge.minDown) {
+        await failRound("Too fast. Take it slow.");
         return;
       }
+      if (challenge.type === "reps" && dur < challenge.minDown) return;
       if (challenge.type === "reps" && dur > challenge.maxDown) {
         await failRound("Too slow. I wanted it fast.");
         return;
@@ -1129,14 +1171,23 @@
       repsDone += 1;
       lastRepAt = Date.now();
       timerEl.textContent = repsDone + " / " + challenge.count;
-      await vibe(Math.min(1, 0.45 + repsDone * 0.12));
-      setTimeout(() => vibe(0), 180);
+      if (challenge.type === "slow") {
+        vibe(0.85);
+        setTimeout(() => vibe(0), 280);
+      } else {
+        vibe(0.75);
+        setTimeout(() => vibe(0), 90);
+      }
+      const slowCounts = ["slow1", "slow2", "slow3"];
+      const fastCounts = ["c1", "c2", "c3", "c4", "c5"];
+      const key = challenge.type === "slow"
+        ? slowCounts[Math.min(repsDone - 1, 2)]
+        : fastCounts[Math.min(repsDone - 1, 4)];
       if (repsDone >= challenge.count) {
+        await play(key);
         winRound(repsDone, Date.now() - commandIssuedAt);
-      } else if (repsDone === 1) {
-        playFile(10);
-      } else if (repsDone === challenge.count - 1) {
-        playFile(97);
+      } else {
+        play(key);
       }
     });
     nose.addEventListener("pointerdown", (e) => {
@@ -1156,10 +1207,10 @@
       vibeBan = 0;
       sessionStart = Date.now();
       lastTimeCall = 0;
-      await play("look");
-      await play("listenOnly");
-      await play("hoodAsk");
-      await play("sayYes");
+      await playSlow("look");
+      await playSlow("listenOnly");
+      await playSlow("hoodAsk");
+      await playSlow("sayYes");
       showReplyButtons("yes");
       startMic();
     }
@@ -1170,30 +1221,30 @@
       hideReplyButtons();
       setInfo("");
       if (type === "yes") {
-        await play("goodboy");
-        await play("lube");
-        await play("toyIn");
+        await playSlow("goodboy");
+        await playSlow("lube");
+        await playSlow("toyIn");
         showReplyButtons("in");
       } else if (type === "in") {
-        await play("thankyou");
-        await play("whatSay");
-        await play("sayThanks");
+        await playSlow("thankyou");
+        await playSlow("whatSay");
+        await playSlow("sayThanks");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
-        await play("welcome");
-        await play("answerOut");
-        await play("handsOff");
-        await play("onButton");
-        await play("ifYouFail");
-        await play("waitForMe");
-        await play("expectations");
-        await play("begin");
-        await play("breathe");
+        await playSlow("welcome");
+        await playSlow("answerOut");
+        await playSlow("handsOff");
+        await playSlow("onButton");
+        await playSlow("ifYouFail");
+        await playSlow("waitForMe");
+        await playSlow("expectations");
+        await playSlow("begin");
+        await playSlow("breathe");
         setPhase("training");
         targetHold = 3;
         round = 0;
         sessionStart = Date.now();
-        scheduleNextCommand(3500);
+        scheduleNextCommand(5000);
       }
       replyLock = false;
     }
