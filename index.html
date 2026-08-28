@@ -38,16 +38,16 @@
     #app {
       height: 100dvh;
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto auto 1fr;
       padding-top: var(--safe-t);
     }
 
     header {
-      padding: 14px 18px 10px;
+      padding: 8px 12px 6px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 8px;
     }
     .brand {
       display: flex;
@@ -89,7 +89,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding: 8px 18px 0;
+      padding: 6px 14px 0;
     }
     #info {
       min-height: 42px;
@@ -120,14 +120,14 @@
     }
 
     .target-wrap {
-      margin-top: 18px;
+      margin-top: 8px;
       display: grid;
       place-items: center;
       z-index: 8;
     }
     #nose-btn {
-      width: min(168px, 42vw);
-      height: min(168px, 42vw);
+      width: min(132px, 36vw);
+      height: min(132px, 36vw);
       border-radius: 50%;
       border: 1px solid rgba(232,180,180,0.28);
       background:
@@ -152,7 +152,7 @@
     #reply-buttons {
       display: none;
       width: min(360px, 92vw);
-      margin-top: 18px;
+      margin-top: 10px;
       z-index: 20;
     }
     #reply-buttons button {
@@ -168,29 +168,41 @@
 
     #dead-zone {
       position: absolute;
-      left: 12px;
-      right: 12px;
+      left: 0;
+      right: 0;
       bottom: 0;
-      height: 34%;
-      border: 1px dashed rgba(255,255,255,0.08);
-      border-bottom: 0;
-      border-radius: 18px 18px 0 0;
-      pointer-events: none;
+      height: min(48vh, 280px);
+      border-top: 1px dashed rgba(255,255,255,0.12);
+      border-radius: 50% 50% 0 0 / 28% 28% 0 0;
+      pointer-events: auto;
+      touch-action: none;
       display: flex;
       align-items: flex-end;
       justify-content: center;
-      padding-bottom: 10px;
-      color: rgba(255,255,255,0.22);
+      padding-bottom: 16px;
+      color: rgba(255,255,255,0.28);
       font-size: 10px;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
-      background: repeating-linear-gradient(135deg, transparent 0 10px, rgba(255,255,255,0.015) 10px 20px);
+      background:
+        radial-gradient(ellipse 78% 90% at 50% 100%, rgba(40,40,44,0.95) 0 62%, transparent 70%),
+        repeating-linear-gradient(135deg, transparent 0 10px, rgba(255,255,255,0.02) 10px 20px);
+      z-index: 6;
+    }
+    #dead-zone b {
+      display: block;
+      font-weight: 500;
+      opacity: .55;
+      margin-top: 4px;
+      letter-spacing: 0.08em;
+      text-transform: none;
     }
 
-    footer {
-      padding: 10px 14px calc(14px + var(--safe-b));
-      background: linear-gradient(180deg, transparent, rgba(11,11,12,0.92) 18%, var(--bg));
-      z-index: 30;
+    #toolbar {
+      padding: 6px 10px 8px;
+      background: rgba(11,11,12,0.96);
+      border-bottom: 1px solid var(--line);
+      z-index: 40;
     }
     .primary-row {
       display: grid;
@@ -198,12 +210,15 @@
       gap: 8px;
       margin-bottom: 8px;
     }
+    header, #toolbar, .btn, #reply-buttons, input {
+      touch-action: manipulation;
+    }
     .btn {
       border: 1px solid var(--line);
       background: var(--bg-elev);
       color: var(--text);
       border-radius: 14px;
-      padding: 13px 14px;
+      padding: 11px 12px;
       font-size: 13px;
       font-weight: 560;
     }
@@ -251,6 +266,21 @@
       </div>
     </header>
 
+    <div id="toolbar">
+      <div class="primary-row">
+        <button class="btn primary" onclick="startSession()">Begin session</button>
+        <button class="btn danger" onclick="stopAll()">Stop</button>
+      </div>
+      <div class="tray">
+        <input id="intiface-ip" type="text" value="192.168.8.235" placeholder="Intiface IP">
+        <button class="btn" onclick="connectToy()">Connect</button>
+        <button class="btn" onclick="testVibe()">Test</button>
+        <button class="btn ghost" onclick="toggleBeats()">Beats</button>
+        <button class="btn ghost" onclick="enableMic()">Mic</button>
+        <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
+      </div>
+    </div>
+
     <section id="stage">
       <div id="log"></div>
       <div id="info">Connect your toy, then begin.</div>
@@ -263,23 +293,8 @@
         <button id="btn-in" onclick="reply('in')">It is in</button>
         <button id="btn-thanks" onclick="reply('thanks')">Thank you, Mistress</button>
       </div>
-      <div id="dead-zone">Base zone</div>
+      <div id="dead-zone">Suction cup · dead zone<b>±7 cm base, no buttons here</b></div>
     </section>
-
-    <footer>
-      <div class="primary-row">
-        <button class="btn primary" onclick="startSession()">Begin session</button>
-        <button class="btn danger" onclick="stopAll()">Stop</button>
-      </div>
-      <div class="tray">
-        <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
-        <button class="btn" onclick="connectToy()">Connect</button>
-        <button class="btn" onclick="testVibe()">Test</button>
-        <button class="btn ghost" onclick="toggleBeats()">Beats</button>
-        <button class="btn ghost" onclick="enableMic()">Mic</button>
-        <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
-      </div>
-    </footer>
   </div>
 
   <script type="module">
@@ -464,7 +479,6 @@
       try {
         recognition.start();
         isListening = true;
-        setInfo((document.getElementById("info").textContent || "") + "  · listening");
       } catch(e) {
         setTimeout(startListening, 350);
       }
@@ -1026,8 +1040,13 @@
         playFile(97);
       }
     });
-    nose.addEventListener("mousedown", () => nose.dispatchEvent(new Event("touchstart")));
-    nose.addEventListener("mouseup", () => nose.dispatchEvent(new Event("touchend")));
+    nose.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchstart"));
+    });
+    nose.addEventListener("pointerup", (e) => {
+      if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchend"));
+    });
+    document.getElementById("dead-zone").addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 
     async function startSession() {
       await loadAudioIndex();
@@ -1048,8 +1067,10 @@
       showReplyButtons("yes");
       startMic();
     }
+    let replyLock = false;
     async function reply(type) {
-      if (waitingFor !== type) return;
+      if (waitingFor !== type || replyLock) return;
+      replyLock = true;
       hideReplyButtons();
       setInfo("");
       if (type === "yes") {
@@ -1079,6 +1100,7 @@
         speak("Sixty minutes. When I say on it, stay down.");
         scheduleNextCommand(900);
       }
+      replyLock = false;
     }
     function checkProgress() {
       if (phase === "training" && Math.random() < 0.35) playPool("progress");
