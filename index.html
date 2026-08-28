@@ -503,7 +503,19 @@
       earned: "067_alright_youve_earned_it.mp3",
       staydown_end: "068_stay_down_on_that_cock_dont_you_dare_pull_off.mp3",
       stroke_end: "069_stroke_that_cock_for_me_harder.mp3",
-      choke_end: "070_choke_on_it_while_you_jerk_off_i_want_to_hear_you_struggle.mp3"
+      choke_end: "070_choke_on_it_while_you_jerk_off_i_want_to_hear_you_struggle.mp3",
+      hoodAsk: "n01_hood_blindfold.mp3",
+      sayYes: "n02_say_yes.mp3",
+      toyIn: "n03_toy_in.mp3",
+      whatSay: "n04_what_do_you_say.mp3",
+      sayThanks: "n05_say_thank_you.mp3",
+      listenOnly: "n06_listen_only.mp3",
+      answerOut: "n07_answer_out_loud.mp3",
+      handsOff: "n08_hands_off.mp3",
+      waitForMe: "n09_wait_for_me.mp3",
+      onButton: "n10_on_the_button.mp3",
+      ifYouFail: "n11_if_you_fail.mp3",
+      breathe: "n12_breathe.mp3"
     };
 
     const POOLS = {
@@ -1044,9 +1056,12 @@
       sessionStart = Date.now();
       lastTimeCall = 0;
       await play("look");
-      tell("Hood on. Blindfold on. Then lube.");
+      await play("hoodAsk");
+      speak("Is your latex hood on? Blindfold tight? Say yes, mistress.");
       await play("lube");
-      tell("Say yes mistress.");
+      await play("listenOnly");
+      await play("sayYes");
+      speak("Say yes, mistress.");
       showReplyButtons("yes");
       startMic();
     }
@@ -1057,21 +1072,28 @@
       if (type === "yes") {
         await play("goodboy");
         await play("putin");
-        tell("Say it is in.");
+        await play("toyIn");
+        speak("Is that toy in your ass, slut? Say it is in.");
         showReplyButtons("in");
       } else if (type === "in") {
         await play("thankyou");
-        tell("Say thank you mistress.");
+        await play("whatSay");
+        await play("sayThanks");
+        speak("What do you say to your mistress? Say thank you, mistress.");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
         await play("welcome");
         await play("expectations");
+        await play("answerOut");
+        await play("onButton");
+        await play("ifYouFail");
+        await play("handsOff");
         await play("begin");
         setPhase("training");
         targetHold = 3;
         round = 0;
         sessionStart = Date.now();
-        tell("Sixty minutes. When I say on it, stay down.");
+        speak("Sixty minutes. When I say on it, stay down.");
         scheduleNextCommand(900);
       }
     }
