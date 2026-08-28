@@ -2,184 +2,284 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0c" />
   <title>Deepthroat Trainer</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0a0a0a;
-      color: #eee;
-      font-family: system-ui, -apple-system, sans-serif;
-      height: 100vh;
-      height: 100dvh;
+    :root {
+      --bg: #0b0b0c;
+      --bg-elev: #141416;
+      --bg-soft: #1b1b1e;
+      --line: rgba(255,255,255,0.08);
+      --text: #f4f1ee;
+      --muted: #9a938c;
+      --accent: #c45c5c;
+      --accent-2: #e8b4b4;
+      --ok: #7dbe8a;
+      --warn: #d4a054;
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Söhne", "SF Pro Display", ui-sans-serif, system-ui, -apple-system, sans-serif;
       overflow: hidden;
       touch-action: none;
       user-select: none;
     }
-    #app { height: 100%; display: flex; flex-direction: column; }
-    #status {
-      padding: 8px 12px;
-      background: #111;
-      font-size: 12px;
+    body {
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(196,92,92,0.12), transparent 55%),
+        var(--bg);
+    }
+    #app {
+      height: 100dvh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding-top: var(--safe-t);
+    }
+
+    header {
+      padding: 14px 18px 10px;
       display: flex;
+      align-items: center;
       justify-content: space-between;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .brand small {
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .brand strong {
+      font-size: 17px;
+      font-weight: 560;
+      letter-spacing: -0.02em;
+    }
+    .chips {
+      display: flex;
       gap: 6px;
       flex-wrap: wrap;
+      justify-content: flex-end;
     }
-    #hold-timer {
-      position: absolute;
-      top: 70px;
-      left: 0; right: 0;
-      text-align: center;
-      font-size: 32px;
-      font-weight: bold;
-      color: #ff4d6d;
-      z-index: 30;
-      display: none;
-      text-shadow: 0 0 10px rgba(255,77,109,0.6);
+    .chip {
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      padding: 6px 9px;
+      border-radius: 999px;
     }
-    #main {
-      flex: 1;
+    .chip.on { color: var(--ok); border-color: rgba(125,190,138,0.35); }
+    .chip.warn { color: var(--warn); }
+
+    #stage {
       position: relative;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      padding-top: 18%;
-    }
-    #nose-btn {
-      width: min(170px, 42vw);
-      height: min(170px, 42vw);
-      border-radius: 50%;
-      background: radial-gradient(circle at 30% 30%, #ff4d6d, #9b1b30);
-      border: 3px solid #ff8fa3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      font-weight: 600;
-      text-align: center;
-      box-shadow: 0 0 30px rgba(255, 77, 109, 0.45);
-      z-index: 20;
-      transition: 0.1s;
-      position: relative;
-    }
-    #nose-btn.active {
-      transform: scale(0.93);
-      box-shadow: 0 0 50px rgba(255, 77, 109, 0.9);
-    }
-    #dead-zone {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      height: 38%;
-      background: repeating-linear-gradient(45deg, #111 0 10px, #1a1a1a 10px 20px);
-      opacity: 0.7;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      color: #555;
-      z-index: 5;
-    }
-    #controls {
-      padding: 8px;
-      background: #111;
-      display: flex;
-      gap: 5px;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-    }
-    #controls button, #controls input {
-      background: #222;
-      color: #eee;
-      border: 1px solid #444;
-      padding: 8px 10px;
-      border-radius: 8px;
-      font-size: 12px;
-    }
-    #controls input { width: 130px; }
-    #log {
-      position: absolute;
-      top: 42px; left: 6px; right: 6px;
-      max-height: 80px;
-      overflow-y: auto;
-      font-size: 11px;
-      color: #aaa;
-      pointer-events: none;
-      z-index: 15;
-      background: rgba(0,0,0,0.5);
+      padding: 8px 18px 0;
     }
     #info {
-      position: absolute;
-      bottom: 42%;
-      left: 0; right: 0;
+      min-height: 42px;
       text-align: center;
+      color: var(--muted);
       font-size: 14px;
-      color: #ccc;
-      z-index: 8;
-      padding: 0 12px;
+      line-height: 1.35;
+      max-width: 320px;
     }
-    #reply-buttons {
-      position: absolute;
-      bottom: 40%;
-      left: 0; right: 0;
+    #hold-timer {
       display: none;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      z-index: 25;
-      padding: 0 16px;
+      margin: 8px 0 4px;
+      font-size: 42px;
+      font-weight: 520;
+      letter-spacing: -0.04em;
+      color: var(--accent-2);
+    }
+    #log {
+      position: absolute;
+      top: 0;
+      left: 16px;
+      right: 16px;
+      max-height: 54px;
+      overflow: hidden;
+      font-size: 10px;
+      color: rgba(255,255,255,0.28);
+      pointer-events: none;
+    }
+
+    .target-wrap {
+      margin-top: 18px;
+      display: grid;
+      place-items: center;
+      z-index: 8;
+    }
+    #nose-btn {
+      width: min(168px, 42vw);
+      height: min(168px, 42vw);
+      border-radius: 50%;
+      border: 1px solid rgba(232,180,180,0.28);
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255,255,255,0.08), transparent 42%),
+        radial-gradient(circle at 50% 50%, #2a1818 0%, #140e0e 70%);
+      color: var(--accent-2);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-size: 11px;
+      box-shadow: 0 0 0 10px rgba(196,92,92,0.05), 0 20px 50px rgba(0,0,0,0.35);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    #nose-btn span { display: block; font-size: 10px; opacity: .65; letter-spacing: .28em; margin-top: 6px; }
+    #nose-btn.active {
+      transform: scale(0.96);
+      box-shadow: 0 0 0 14px rgba(196,92,92,0.14), 0 10px 30px rgba(196,92,92,0.2);
+    }
+
+    #reply-buttons {
+      display: none;
+      width: min(360px, 92vw);
+      margin-top: 18px;
+      z-index: 20;
     }
     #reply-buttons button {
       width: 100%;
-      max-width: 300px;
-      padding: 14px 12px;
+      padding: 16px 18px;
+      border: 0;
+      border-radius: 16px;
+      background: var(--text);
+      color: #161412;
       font-size: 16px;
       font-weight: 600;
-      background: #2a1a1a;
-      border: 2px solid #ff4d6d;
-      color: #fff;
-      border-radius: 12px;
     }
-    #reply-buttons button:active { background: #ff4d6d; }
+
+    #dead-zone {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 0;
+      height: 34%;
+      border: 1px dashed rgba(255,255,255,0.08);
+      border-bottom: 0;
+      border-radius: 18px 18px 0 0;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 10px;
+      color: rgba(255,255,255,0.22);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      background: repeating-linear-gradient(135deg, transparent 0 10px, rgba(255,255,255,0.015) 10px 20px);
+    }
+
+    footer {
+      padding: 10px 14px calc(14px + var(--safe-b));
+      background: linear-gradient(180deg, transparent, rgba(11,11,12,0.92) 18%, var(--bg));
+      z-index: 30;
+    }
+    .primary-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font-size: 13px;
+      font-weight: 560;
+    }
+    .btn.primary {
+      background: var(--text);
+      color: #151311;
+      border-color: transparent;
+    }
+    .btn.ghost { color: var(--muted); }
+    .btn.danger { color: #f0c7c7; }
+    .tray {
+      display: grid;
+      grid-template-columns: 1.2fr auto auto auto auto;
+      gap: 6px;
+    }
+    .tray input {
+      width: 100%;
+      min-width: 0;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 11px 10px;
+      font-size: 12px;
+    }
+    .tray .btn { padding: 11px 10px; font-size: 12px; }
+    @media (max-width: 420px) {
+      .tray { grid-template-columns: 1fr 1fr 1fr; }
+      .tray input { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body>
   <div id="app">
-    <div id="status">
-      <span id="phase">Idle</span>
-      <span id="score">Score: 0</span>
-      <span id="toy-status">Toy: —</span>
-      <span id="voice-label">Domi</span>
-    </div>
+    <header>
+      <div class="brand">
+        <small>Private session</small>
+        <strong>Trainer</strong>
+      </div>
+      <div class="chips">
+        <div class="chip" id="phase">Idle</div>
+        <div class="chip" id="score">0</div>
+        <div class="chip" id="toy-status">Toy off</div>
+        <div class="chip" id="voice-label">Domi</div>
+      </div>
+    </header>
 
-    <div id="log"></div>
-    <div id="hold-timer">0.0s</div>
-    <div id="info"></div>
+    <section id="stage">
+      <div id="log"></div>
+      <div id="info">Connect your toy, then begin.</div>
+      <div id="hold-timer">0.0s</div>
+      <div class="target-wrap">
+        <div id="nose-btn">Hold<span>nose</span></div>
+      </div>
+      <div id="reply-buttons">
+        <button id="btn-yes" onclick="reply('yes')">Yes, Mistress</button>
+        <button id="btn-in" onclick="reply('in')">It is in</button>
+        <button id="btn-thanks" onclick="reply('thanks')">Thank you, Mistress</button>
+      </div>
+      <div id="dead-zone">Base zone</div>
+    </section>
 
-    <div id="reply-buttons">
-      <button id="btn-yes" onclick="reply('yes')">Yes, Mistress</button>
-      <button id="btn-in" onclick="reply('in')">It is in</button>
-      <button id="btn-thanks" onclick="reply('thanks')">Thank you, Mistress</button>
-    </div>
-
-    <div id="main">
-      <div id="nose-btn">NOSE<br>BUTTON</div>
-      <div id="dead-zone">DILDO BASE ZONE (dead)</div>
-    </div>
-
-    <div id="controls">
-      <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
-      <button onclick="connectToy()">Connect Toy</button>
-      <button onclick="testVibe()">Test Vibe</button>
-      <button onclick="startSession()">Start</button>
-      <button onclick="cycleVoice()">Voice</button>
-      <button onclick="enableMic()">Enable Mic</button>
-      <button onclick="stopAll()">Stop</button>
-      <button onclick="changeSlaps()">Slaps: <span id="slap-num">5</span></button>
-    </div>
+    <footer>
+      <div class="primary-row">
+        <button class="btn primary" onclick="startSession()">Begin session</button>
+        <button class="btn danger" onclick="stopAll()">Stop</button>
+      </div>
+      <div class="tray">
+        <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
+        <button class="btn" onclick="connectToy()">Connect</button>
+        <button class="btn" onclick="testVibe()">Test</button>
+        <button class="btn ghost" onclick="cycleVoice()">Voice</button>
+        <button class="btn ghost" onclick="enableMic()">Mic</button>
+        <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
+      </div>
+    </footer>
   </div>
 
   <script type="module">
@@ -191,7 +291,6 @@
     const VOICES = ["domi", "charlotte", "rachel"];
     let currentVoice = 0;
     let slapTarget = 5;
-
     let client = null;
     let device = null;
     let audio = null;
@@ -202,12 +301,10 @@
     let slapCount = 0;
     let waitingFor = null;
     let holdTimerInterval = null;
-
     let micStream = null;
     let analyser = null;
     let lastSlapTime = 0;
     let prevEnergy = 0;
-
     let recognition = null;
     let isListening = false;
 
@@ -217,28 +314,31 @@
     }
     function setPhase(p) {
       phase = p;
-      document.getElementById("phase").textContent = p.toUpperCase();
+      const el = document.getElementById("phase");
+      el.textContent = p;
+      el.classList.toggle("on", p === "training" || p === "ending");
+      el.classList.toggle("warn", p === "punishment");
     }
     function setScore(s) {
       score = Math.max(0, s);
-      document.getElementById("score").textContent = "Score: " + score;
+      document.getElementById("score").textContent = score;
     }
     function setInfo(text) {
       document.getElementById("info").textContent = text || "";
     }
     function setToyStatus(t) {
-      document.getElementById("toy-status").textContent = "Toy: " + t;
+      const el = document.getElementById("toy-status");
+      el.textContent = t;
+      el.classList.toggle("on", t !== "Toy off" && t !== "—");
     }
-
     function showReplyButtons(which) {
       waitingFor = which;
-      document.getElementById("reply-buttons").style.display = "flex";
+      document.getElementById("reply-buttons").style.display = "block";
       document.getElementById("btn-yes").style.display = which === "yes" ? "block" : "none";
       document.getElementById("btn-in").style.display = which === "in" ? "block" : "none";
       document.getElementById("btn-thanks").style.display = which === "thanks" ? "block" : "none";
       startListening();
     }
-
     function hideReplyButtons() {
       waitingFor = null;
       document.getElementById("reply-buttons").style.display = "none";
@@ -264,18 +364,16 @@
       recognition.onend = () => { isListening = false; if (waitingFor) setTimeout(startListening, 400); };
       return true;
     }
-
     async function enableMic() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(t => t.stop());
         if (!recognition) initSpeech();
-        alert("Microphone ready!");
+        setInfo("Microphone ready.");
       } catch (e) {
-        alert("Please allow microphone access.");
+        setInfo("Allow microphone access in the browser.");
       }
     }
-
     function startListening() {
       if (!recognition || isListening || !waitingFor) return;
       try { recognition.start(); isListening = true; } catch(e) { setTimeout(startListening, 800); }
@@ -314,18 +412,14 @@
     function play(key) {
       return new Promise((resolve) => {
         const file = LINES[key];
-        if (!file) {
-          log("No file for key: " + key);
-          resolve();
-          return;
-        }
+        if (!file) { resolve(); return; }
         if (audio) { audio.pause(); audio = null; }
         const path = `audio/${VOICES[currentVoice]}/${file}`;
-        log("Trying: " + path);
+        log("▶ " + key);
         audio = new Audio(path);
-        audio.onended = () => { log("Finished: " + key); resolve(); };
-        audio.onerror = () => { log("FAILED to load: " + path); resolve(); };
-        audio.play().catch((e) => { log("Play error: " + e.message); resolve(); });
+        audio.onended = () => resolve();
+        audio.onerror = () => { log("FAILED " + path); resolve(); };
+        audio.play().catch(() => resolve());
       });
     }
 
@@ -337,86 +431,40 @@
         client.addListener("deviceadded", d => {
           device = d;
           setToyStatus(d.name || d.displayName || "Connected");
-          log("Device: " + (d.name || d.displayName || "unknown"));
         });
         client.addListener("deviceremoved", () => {
           device = null;
-          setToyStatus("—");
+          setToyStatus("Toy off");
         });
-        log("Connecting to " + address);
+        log("Connecting " + address);
         const connector = new ButtplugBrowserWebsocketClientConnector(address);
         await client.connect(connector);
         await client.startScanning();
-        log("Connected + scanning");
+        setInfo("Scanning for your toy.");
       } catch (e) {
         log("Connect failed: " + e.message);
-        alert("Kan niet verbinden met Intiface");
+        setInfo("Could not reach Intiface.");
       }
     }
 
     async function vibe(intensity) {
-      if (!device) {
-        log("No device");
-        return;
-      }
+      if (!device) return;
       intensity = Math.max(0, Math.min(1, intensity));
-      log("Vibe → " + intensity.toFixed(2));
-
-      try {
-        if (typeof device.vibrate === "function") {
-          await device.vibrate(intensity);
-          log("vibrate() OK");
-          return;
-        }
-      } catch (e) {
-        log("vibrate() error: " + (e.message || e));
-      }
-
-      try {
-        if (typeof device.scalar === "function") {
-          await device.scalar([{ Index: 0, Scalar: intensity, ActuatorType: "Vibrate" }]);
-          log("scalar() OK");
-          return;
-        }
-      } catch (e) {
-        log("scalar() error: " + (e.message || e));
-      }
-
-      try {
-        if (typeof device.vibrate === "function") {
-          await device.vibrate([intensity, intensity]);
-          log("vibrate([]) OK");
-          return;
-        }
-      } catch (e) {
-        log("vibrate([]) error: " + (e.message || e));
-      }
-
-      try {
-        if (intensity === 0 && typeof device.stop === "function") {
-          await device.stop();
-          log("stop() OK");
-          return;
-        }
-      } catch (e) {
-        log("stop() error: " + (e.message || e));
-      }
-
-      log("Vibration failed");
+      try { await device.vibrate(intensity); return; } catch (e) { log("vibrate() " + (e.message || e)); }
+      try { await device.scalar([{ Index: 0, Scalar: intensity, ActuatorType: "Vibrate" }]); return; } catch (e) {}
+      try { await device.vibrate([intensity, intensity]); return; } catch (e) {}
+      if (intensity === 0 && device.stop) { try { await device.stop(); } catch (e) {} }
     }
-
     async function testVibe() {
-      log("Testing vibration...");
-      if (device) log("Device name: " + (device.name || device.displayName || "?"));
+      setInfo("Testing vibration.");
       await vibe(0.8);
       setTimeout(() => vibe(0), 2500);
     }
-
     async function stopAll() {
       await vibe(0);
       if (audio) { audio.pause(); audio = null; }
       hideReplyButtons();
-      setInfo("");
+      setInfo("Stopped.");
       clearInterval(holdTimerInterval);
       document.getElementById("hold-timer").style.display = "none";
     }
@@ -433,7 +481,6 @@
         detectSlaps();
       } catch(e){}
     }
-
     function detectSlaps() {
       if (!analyser) { requestAnimationFrame(detectSlaps); return; }
       const data = new Uint8Array(analyser.frequencyBinCount);
@@ -448,13 +495,13 @@
       if (phase === "punishment" && highEnergy > 48 && spike > 18 && now - lastSlapTime > 380) {
         lastSlapTime = now;
         slapCount++;
-        setInfo(`Slaps: ${slapCount} / ${slapTarget}`);
+        setInfo(`Slaps ${slapCount} / ${slapTarget}`);
         vibe(0.25).then(() => setTimeout(() => vibe(0), 120));
         if (slapCount >= slapTarget) {
           play("enough").then(() => {
             play("backon");
             setPhase("training");
-            setInfo("Back to training");
+            setInfo("Back on it.");
             slapCount = 0;
           });
         }
@@ -464,7 +511,6 @@
 
     const nose = document.getElementById("nose-btn");
     const timerEl = document.getElementById("hold-timer");
-
     nose.addEventListener("touchstart", async e => {
       e.preventDefault();
       if (phase !== "training" && phase !== "ending") return;
@@ -478,7 +524,6 @@
       }, 100);
       await vibe(phase === "ending" ? 1.0 : 0.55);
     });
-
     nose.addEventListener("touchend", async e => {
       e.preventDefault();
       if (!isHolding) return;
@@ -486,14 +531,8 @@
       nose.classList.remove("active");
       clearInterval(holdTimerInterval);
       timerEl.style.display = "none";
-
       const dur = (Date.now() - holdStart) / 1000;
-
-      if (phase === "ending") {
-        await vibe(0.7);
-        return;
-      }
-
+      if (phase === "ending") { await vibe(0.7); return; }
       if (dur < 1.8) {
         await vibe(0);
         setScore(score - 3);
@@ -524,7 +563,6 @@
         checkProgress();
       }
     });
-
     nose.addEventListener("mousedown", () => nose.dispatchEvent(new Event("touchstart")));
     nose.addEventListener("mouseup", () => nose.dispatchEvent(new Event("touchend")));
 
@@ -534,10 +572,9 @@
       hideReplyButtons();
       await play("look");
       await play("lube");
-      setInfo("Zeg: Yes, Mistress");
+      setInfo("Answer her.");
       showReplyButtons("yes");
     }
-
     async function reply(type) {
       if (waitingFor !== type) return;
       hideReplyButtons();
@@ -545,21 +582,20 @@
       if (type === "yes") {
         await play("goodboy");
         await play("putin");
-        setInfo("Zeg: It is in");
+        setInfo("Answer her.");
         showReplyButtons("in");
       } else if (type === "in") {
         await play("thankyou");
-        setInfo("Zeg: Thank you, Mistress");
+        setInfo("Answer her.");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
         await play("welcome");
         await play("expectations");
         await play("begin");
         setPhase("training");
-        setInfo("Train. Houd de knop in met je neus.");
+        setInfo("Hold the target with your nose.");
       }
     }
-
     function checkProgress() {
       if (score >= 45 && phase === "training") play("closer");
       if (score >= 70 && phase === "training") play("almost");
@@ -569,26 +605,23 @@
           play("staydown_end").then(() => {
             play("stroke_end").then(() => {
               play("choke_end");
-              setInfo("Stay down & stroke until you cum");
+              setInfo("Stay down and finish.");
               vibe(0.9);
             });
           });
         });
       }
     }
-
     function cycleVoice() {
       currentVoice = (currentVoice + 1) % VOICES.length;
       document.getElementById("voice-label").textContent = VOICES[currentVoice];
     }
-
     function changeSlaps() {
       slapTarget = slapTarget === 5 ? 3 : slapTarget === 3 ? 8 : 5;
       document.getElementById("slap-num").textContent = slapTarget;
     }
 
     document.body.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
-
     window.startSession = startSession;
     window.reply = reply;
     window.cycleVoice = cycleVoice;
@@ -597,8 +630,6 @@
     window.enableMic = enableMic;
     window.stopAll = stopAll;
     window.changeSlaps = changeSlaps;
-
-    log("Ready");
   </script>
 </body>
 </html>
