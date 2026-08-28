@@ -361,15 +361,7 @@
       document.getElementById("score").textContent = score;
     }
     function speak(text) {
-      if (!text) return;
-      try {
-        window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
-        u.rate = 0.88;
-        u.pitch = 0.75;
-        u.lang = "en-US";
-        window.speechSynthesis.speak(u);
-      } catch (e) {}
+      // Domi mp3 only. No Google voice.
     }
     function setInfo(text) {
       document.getElementById("info").textContent = text || "";
@@ -481,92 +473,86 @@
       if (recognition && isListening) { try { recognition.stop(); } catch(e){} isListening = false; }
     }
 
-    const LINES = {
-      look: "001_look_at_me_listen_carefully.mp3",
-      lube: "002_lube_that_toy_up_nice_and_slow_then_slide_it_into_your_ass_f.mp3",
-      goodboy: "003_good_boy.mp3",
-      putin: "004_now_put_it_in_dont_make_me_wait.mp3",
-      thankyou: "005_mmm_good_thank_you_for_taking_my_toy_like_a_good_boy.mp3",
-      welcome: "006_youre_welcome.mp3",
-      expectations: "007_youre_going_to_deepthroat_that_cock_for_me_every_time_your_n.mp3",
-      begin: "008_good_begin_when_youre_ready.mp3",
-      stroke: "029_good_boy_you_earned_it_stroke_that_cock_for_me.mp3",
-      stroke10: "030_you_can_stroke_it_now_ten_seconds.mp3",
-      strokeSlow: "031_hands_on_it_stroke_slowly_enjoy_it.mp3",
-      strokeBuzz: "032_thats_it_stroke_for_me_while_it_buzzes_in_your_ass.mp3",
-      handsoff: "037_hands_off_now.mp3",
-      slap: "044_slap_your_ass_five_times_hard_i_want_to_hear_it.mp3",
-      harder: "045_harder.mp3",
-      enough: "048_good_thats_enough.mp3",
-      backon: "049_now_get_back_on_that_cock_and_do_it_properly.mp3",
-      dontfail: "050_dont_fail_me_again.mp3",
-      earned: "067_alright_youve_earned_it.mp3",
-      staydown_end: "068_stay_down_on_that_cock_dont_you_dare_pull_off.mp3",
-      stroke_end: "069_stroke_that_cock_for_me_harder.mp3",
-      choke_end: "070_choke_on_it_while_you_jerk_off_i_want_to_hear_you_struggle.mp3",
-      hoodAsk: "n01_hood_blindfold.mp3",
-      sayYes: "n02_say_yes.mp3",
-      toyIn: "n03_toy_in.mp3",
-      whatSay: "n04_what_do_you_say.mp3",
-      sayThanks: "n05_say_thank_you.mp3",
-      listenOnly: "n06_listen_only.mp3",
-      answerOut: "n07_answer_out_loud.mp3",
-      handsOff: "n08_hands_off.mp3",
-      waitForMe: "n09_wait_for_me.mp3",
-      onButton: "n10_on_the_button.mp3",
-      ifYouFail: "n11_if_you_fail.mp3",
-      breathe: "n12_breathe.mp3"
-    };
+    let FILE_INDEX = [];
+    async function loadAudioIndex() {
+      if (FILE_INDEX.length) return;
+      try {
+        const j = await fetch("audio/domi/index.json").then(r => r.ok ? r.json() : Promise.reject());
+        if (Array.isArray(j) && j.length) FILE_INDEX = j;
+      } catch (e) {}
+      if (!FILE_INDEX.length) {
+        const names = `001_look_at_me_open_that_throat_youre_mine_for_the_next_hour.mp3
+002_lube_that_plug_get_it_wet_then_push_it_into_your_slutty_ass_.mp3
+003_good_boy_such_a_needy_little_hole.mp3
+004_sink_it_in_dont_tease_me_i_want_it_buried.mp3
+005_mmm_thats_it_stuffed_for_me_like_a_good_whore.mp3
+006_youre_welcome_now_shut_up_and_listen.mp3
+007_youre_going_to_choke_on_this_cock_until_your_eyes_water_nose.mp3
+008_good_hood_on_blindfold_on_begin_when_i_tell_you.mp3
+009_on_it_swallow_it.mp3
+010_deeper_i_want_that_bulge_in_your_throat.mp3
+011_hold_drool_dont_you_dare_come_up.mp3
+012_five_four_three_two_one_stay_impaled.mp3
+013_keep_it_down_i_own_that_airway.mp3
+014_choke_on_it_let_me_hear_that_filthy_gag.mp3
+015_mmm_messy_boy_thats_how_i_like_you.mp3
+016_again_fuck_your_face_on_it.mp3
+017_look_at_you_slobbering_keep_going.mp3
+018_stay_down_feel_that_plug_buzzing_while_your_throat_is_full.mp3
+019_take_every_inch_nose_smashed_thats_your_place.mp3
+020_deeper_slut.mp3
+021_hold_it_gag.mp3
+022_stay_be_a_hole.mp3
+023_there_feel_that_buzz_thats_for_taking_cock_like_a_whore.mp3
+024_good_boy_you_earned_that_in_your_ass.mp3
+025_stay_stuffed_and_enjoy_it.mp3
+026_mmm_throat_used_ass_buzzing_perfect.mp3
+027_thats_my_good_cockslut.mp3
+028_nice_keep_your_mouth_full.mp3
+029_good_boy_you_may_stroke_that_dripping_cock_for_me.mp3
+030_stroke_ten_seconds_dont_you_dare_finish.mp3
+037_hands_off_now_throat_back_on.mp3
+040_i_didnt_say_you_could_come_up_slut.mp3
+044_slap_that_ass_five_hard_i_want_it_red.mp3
+048_good_thats_enough_for_now.mp3
+049_get_back_on_that_cock_and_take_it_properly.mp3
+050_fail_me_again_and_the_toy_goes_silent.mp3
+068_alright_youve_earned_the_ending.mp3
+069_stay_down_cock_buried_dont_you_dare_pull_off.mp3
+070_stroke_that_cock_hard_throat_full.mp3
+071_choke_and_jerk_i_want_spit_and_tears.mp3
+086_when_i_say_on_it_you_swallow_not_before.mp3
+087_five_deepthroats_fast_no_air_between_them.mp3
+089_fast_fast_fast_facefuck_yourself.mp3
+095_on_it_now_eat_it.mp3
+115_latex_hood_tight_erase_that_face.mp3
+116_blindfold_now_you_dont_get_eyes_only_cock_and_voice.mp3`.trim().split(/\n/).map(s => s.trim());
+        FILE_INDEX = names;
+      }
+      log("Audio files " + FILE_INDEX.length);
+    }
+    function fileByNum(n) {
+      const pad = String(n).padStart(3, "0") + "_";
+      const hit = FILE_INDEX.find(f => typeof f === "string" && f.startsWith(pad));
+      return hit || null;
+    }
 
+    const LINES = {
+      look: 1, lube: 2, goodboy: 3, putin: 4, thankyou: 5, welcome: 6,
+      expectations: 7, begin: 8,
+      stroke: 29, stroke10: 30, handsoff: 37,
+      slap: 44, harder: 45, enough: 48, backon: 49, dontfail: 50,
+      earned: 68, staydown_end: 69, stroke_end: 70, choke_end: 71,
+      hoodAsk: 115, sayYes: 86, toyIn: 4, whatSay: 114, sayThanks: 5,
+      listenOnly: 137, answerOut: 108, handsOff: 118, waitForMe: 86,
+      onButton: 95, ifYouFail: 121, breathe: 114
+    };
     const POOLS = {
-      hold: [
-        "010_deeper_yes_just_like_that.mp3",
-        "011_hold_it_stay_right_there.mp3",
-        "013_dont_you_dare_pull_off_until_i_say.mp3",
-        "017_youre_doing_so_well_for_me_keep_going.mp3",
-        "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3",
-        "019_thats_it_take_it_all.mp3",
-        "020_deeper.mp3",
-        "021_hold.mp3",
-        "022_stay.mp3"
-      ],
-      reward: [
-        "023_there_it_is_feel_that_thats_yours.mp3",
-        "024_good_boy_you_earned_that_vibration.mp3",
-        "025_stay_right_there_and_enjoy_it.mp3",
-        "026_mmm_look_at_you_taking_it_so_well.mp3",
-        "027_thats_my_good_boy.mp3",
-        "028_nice_keep_it_there.mp3",
-        "015_mmm_good_boy_thats_better.mp3"
-      ],
-      fail: [
-        "040_i_didnt_say_you_could_pull_off.mp3",
-        "041_no_thats_not_good_enough.mp3",
-        "042_no_reward_for_that.mp3",
-        "043_you_failed_me.mp3",
-        "055_that_wasnt_good_enough_keep_going.mp3"
-      ],
-      choke: [
-        "014_choke_on_it_for_me_let_me_hear_that_pretty_sound.mp3",
-        "010_deeper_yes_just_like_that.mp3",
-        "019_thats_it_take_it_all.mp3",
-        "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3",
-        "015_mmm_good_boy_thats_better.mp3"
-      ],
-      progress: [
-        "051_youre_not_ready_to_cum_yet.mp3",
-        "052_keep_earning_it.mp3",
-        "053_i_decide_when_you_get_to_finish.mp3",
-        "054_more_show_me_you_deserve_it.mp3",
-        "056_you_want_to_cum_then_stay_down_longer.mp3",
-        "057_earn_it_good_boy.mp3",
-        "058_youre_getting_closer.mp3",
-        "059_almost_there_keep_going.mp3",
-        "060_a_few_more_good_holds_and_you_might_earn_it.mp3",
-        "061_youre_close_now_dont_mess_it_up.mp3",
-        "063_youre_doing_better_keep_it_up.mp3",
-        "064_youre_right_on_the_edge_of_earning_it.mp3"
-      ]
+      hold: [10, 11, 13, 17, 18, 19, 20, 21, 22, 145, 146],
+      reward: [23, 24, 25, 26, 27, 28, 15, 102, 103],
+      fail: [40, 41, 42, 43, 55, 104, 105, 107],
+      choke: [14, 129, 130, 131, 132, 10, 19],
+      progress: [51, 52, 53, 54, 56, 57, 58, 59, 60, 61, 63, 64, 125, 126, 127]
     };
 
     const lastPlayed = {};
@@ -666,23 +652,25 @@
 
     function playFile(file) {
       return new Promise(async (resolve) => {
-        if (!file) { resolve(); return; }
-        if (audio) { audio.pause(); audio = null; }
+        if (file == null || file === "") { resolve(); return; }
+        await loadAudioIndex();
+        if (typeof file === "number") {
+          file = fileByNum(file);
+          if (!file) { log("No file for number " + file); resolve(); return; }
+        }
+        if (audio) { try { audio.pause(); } catch(e){} audio = null; }
+        try { window.speechSynthesis.cancel(); } catch(e){}
         const path = `audio/${VOICE}/${file}`;
         log("▶ " + file);
         await ensureAudio();
         stopListening();
         duckBg(true);
         audio = new Audio(path);
-        audio.crossOrigin = "anonymous";
-        try {
-          const src = audioCtx.createMediaElementSource(audio);
-          src.connect(voiceGain);
-        } catch (e) {}
+        audio.preload = "auto";
         const done = () => { duckBg(false); if (waitingFor) setTimeout(startListening, 200); resolve(); };
         audio.onended = done;
         audio.onerror = () => { log("FAILED " + path); done(); };
-        audio.play().catch(done);
+        audio.play().catch((e) => { log("Play error " + e.message); done(); });
       });
     }
     function play(key) {
@@ -825,11 +813,11 @@
     function nextChallenge() {
       const hold = Math.min(8, 3 + Math.floor(round / 3));
       const deck = [
-        { type: "hold", secs: hold, files: ["011_hold_it_stay_right_there.mp3", "021_hold.mp3", "022_stay.mp3", "013_dont_you_dare_pull_off_until_i_say.mp3"], info: `Stay down ${hold}s. Don't come up.` },
-        { type: "reps", count: 5, maxGap: 950, minDown: 0.18, maxDown: 1.1, files: ["009_on_it.mp3", "016_again_deeper_this_time.mp3", "010_deeper_yes_just_like_that.mp3"], info: "5 deepthroats. Fast. No rest." },
-        { type: "reps", count: 4, maxGap: 800, minDown: 0.15, maxDown: 0.9, files: ["009_on_it.mp3", "020_deeper.mp3"], info: "4 quick ones. All the way down." },
-        { type: "slow", count: 3, maxGap: 2800, minDown: 1.1, maxDown: 4, files: ["011_hold_it_stay_right_there.mp3", "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3"], info: "3 slow ones. Down, hold, up." },
-        { type: "hold", secs: hold + 1, files: ["012_five_four_three_two_one_stay.mp3", "013_dont_you_dare_pull_off_until_i_say.mp3"], info: `Hold through the count. ${hold + 1}s.` }
+        { type: "hold", secs: hold, files: [11, 21, 22, 13, 92], info: `Stay down ${hold}s. Don't come up.` },
+        { type: "reps", count: 5, maxGap: 950, minDown: 0.18, maxDown: 1.1, files: [87, 88, 89, 9], info: "5 deepthroats. Fast. No rest." },
+        { type: "reps", count: 4, maxGap: 800, minDown: 0.15, maxDown: 0.9, files: [109, 95, 20], info: "4 quick ones. All the way down." },
+        { type: "slow", count: 3, maxGap: 2800, minDown: 1.1, maxDown: 4, files: [90, 91, 18], info: "3 slow ones. Down, hold, up." },
+        { type: "hold", secs: hold + 1, files: [12, 93, 135], info: `Hold through the count. ${hold + 1}s.` }
       ];
       if (round < 2) return deck[0];
       return deck[round % deck.length];
@@ -851,27 +839,21 @@
       if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
       else timerEl.textContent = "0 / " + challenge.count;
       await playFile(lastCommandFile);
-      const modeLine = {
-        rise: "The longer you stay, the harder it buzzes.",
-        pulse: "Pulsing. Ride it.",
-        wave: "Waves. Stay through them.",
-        heartbeat: "Heartbeat. Match me.",
-        stagger: "On and off. Don't flinch."
-      }[vibeMode];
-      if (challenge.type === "hold") {
-        await playFile("012_five_four_three_two_one_stay.mp3");
-        speak(challenge.secs + " seconds. Stay. " + modeLine);
-      } else if (challenge.type === "reps") {
-        speak(challenge.count + " times. Fast. All the way down. " + modeLine);
-      } else if (challenge.type === "slow") {
-        speak(challenge.count + " slow ones. Down. Hold. Up. " + modeLine);
-      }
+      if (challenge.type === "hold") await playFile(12);
+      else if (challenge.type === "reps") await playFile(89);
+      else if (challenge.type === "slow") await playFile(90);
+      if (vibeMode === "pulse") await playFile(140);
+      if (vibeMode === "wave") await playFile(141);
+      if (vibeMode === "heartbeat") await playFile(142);
+      if (vibeMode === "stagger") await playFile(143);
+      if (vibeMode === "rise") await playFile(138);
       const elapsed = Date.now() - sessionStart;
       if (elapsed - lastTimeCall > 4 * 60 * 1000) {
         lastTimeCall = elapsed;
-        const left = Math.max(1, Math.round((SESSION_MS - elapsed) / 60000));
-        speak(left + " minutes left. Stay in it.");
         playPool("progress");
+        if (elapsed > 40 * 60 * 1000) await playFile(128);
+        else if (elapsed > 20 * 60 * 1000) await playFile(127);
+        else await playFile(126);
       }
     }
 
@@ -1039,15 +1021,16 @@
       if (repsDone >= challenge.count) {
         winRound(repsDone, Date.now() - commandIssuedAt);
       } else if (repsDone === 1) {
-        playFile("010_deeper_yes_just_like_that.mp3");
+        playFile(10);
       } else if (repsDone === challenge.count - 1) {
-        playFile("016_again_deeper_this_time.mp3");
+        playFile(97);
       }
     });
     nose.addEventListener("mousedown", () => nose.dispatchEvent(new Event("touchstart")));
     nose.addEventListener("mouseup", () => nose.dispatchEvent(new Event("touchend")));
 
     async function startSession() {
+      await loadAudioIndex();
       await ensureAudio();
       setScore(0);
       setPhase("setup");
