@@ -275,7 +275,7 @@
         <input id="intiface-ip" type="text" value="192.168.8.168" placeholder="Intiface IP">
         <button class="btn" onclick="connectToy()">Connect</button>
         <button class="btn" onclick="testVibe()">Test</button>
-        <button class="btn ghost" onclick="cycleVoice()">Voice</button>
+        <button class="btn ghost" onclick="toggleBeats()">Beats</button>
         <button class="btn ghost" onclick="enableMic()">Mic</button>
         <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
       </div>
@@ -290,8 +290,12 @@
       OutputType
     } from "https://cdn.jsdelivr.net/npm/buttplug@5/dist/web/buttplug.mjs";
 
-    const VOICES = ["domi", "charlotte", "rachel"];
-    let currentVoice = 0;
+    const VOICE = "domi";
+    let beatsOn = true;
+    let audioCtx = null;
+    let bgGain = null;
+    let voiceGain = null;
+    let voiceDest = null;
     let slapTarget = 5;
     let client = null;
     let device = null;
@@ -309,6 +313,37 @@
     let prevEnergy = 0;
     let recognition = null;
     let isListening = false;
+    let targetHold = 3;
+    let commandActive = false;
+    let commandIssuedAt = 0;
+    let round = 0;
+    let nextCommandTimer = null;
+    let holdTick = null;
+    let lastCommandFile = "";
+    let challenge = null;
+    let repsDone = 0;
+    let lastRepAt = 0;
+    let vibeBan = 0;
+    let punishKind = "slaps";
+    let sessionStart = 0;
+    let lastChokeLine = 0;
+    let lastTimeCall = 0;
+    const SESSION_MS = 60 * 60 * 1000;
+    const VIBE_MODES = ["rise", "pulse", "wave", "heartbeat", "stagger"];
+    let vibeMode = "rise";
+    let lastCoach = 0;
+
+    function vibePattern(t, mode) {
+      const climb = Math.min(1, 0.28 + t * 0.12);
+      if (mode === "pulse") return Math.min(1, climb * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 10))));
+      if (mode === "wave") return Math.min(1, climb * (0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 2.2))));
+      if (mode === "heartbeat") {
+        const beat = t % 1.05;
+        return Math.min(1, climb * (beat < 0.12 || (beat > 0.22 && beat < 0.32) ? 1 : 0.22));
+      }
+      if (mode === "stagger") return Math.min(1, climb * (Math.floor(t * 2) % 2 ? 0.95 : 0.35));
+      return Math.min(1, 0.25 + t * 0.18);
+    }
 
     function log(msg) {
       const el = document.getElementById("log");
@@ -325,8 +360,23 @@
       score = Math.max(0, s);
       document.getElementById("score").textContent = score;
     }
+    function speak(text) {
+      if (!text) return;
+      try {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 0.88;
+        u.pitch = 0.75;
+        u.lang = "en-US";
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    }
     function setInfo(text) {
       document.getElementById("info").textContent = text || "";
+    }
+    function tell(text) {
+      setInfo(text);
+      speak(text);
     }
     function setToyStatus(t) {
       const el = document.getElementById("toy-status");
@@ -347,23 +397,63 @@
       stopListening();
     }
 
+    function normTalk(s) {
+      return (s || "").toLowerCase()
+        .replace(/missus|missis|mistres|mistriss/g, "mistress")
+        .replace(/ma'am|mam|maam/g, "maam")
+        .replace(/it's|its/g, "it is")
+        .replace(/thankyou/g, "thank you")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    function matchReply(raw) {
+      const t = normTalk(raw);
+      if (!t || t.length < 2) return null;
+      if (waitingFor === "yes") {
+        if (/\b(yes|yeah|yep|yea|ja|ok|okay)\b/.test(t)) return "yes";
+        if (/\b(mistress|miss|maam)\b/.test(t) && t.length <= 20) return "yes";
+      }
+      if (waitingFor === "in") {
+        if (/it is in|zit erin|het is erin|plug is in|toy is in|inside/.test(t)) return "in";
+        if (/\b(in|erin)\b/.test(t)) return "in";
+      }
+      if (waitingFor === "thanks") {
+        if (/\b(thank|thanks|dank|dankjewel)\b/.test(t)) return "thanks";
+      }
+      return null;
+    }
     function initSpeech() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) return false;
       recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 3;
       recognition.lang = "en-US";
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.toLowerCase();
-        log("Heard: " + transcript);
         if (!waitingFor) return;
-        if (waitingFor === "yes" && (transcript.includes("yes") || transcript.includes("mistress"))) reply("yes");
-        else if (waitingFor === "in" && (transcript.includes("in") || transcript.includes("it is"))) reply("in");
-        else if (waitingFor === "thanks" && transcript.includes("thank")) reply("thanks");
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          let transcript = "";
+          for (let a = 0; a < res.length; a++) transcript += " " + res[a].transcript;
+          log("Heard: " + transcript);
+          const hit = matchReply(transcript);
+          if (hit) {
+            stopListening();
+            reply(hit);
+            return;
+          }
+        }
       };
-      recognition.onerror = () => { isListening = false; if (waitingFor) setTimeout(startListening, 600); };
-      recognition.onend = () => { isListening = false; if (waitingFor) setTimeout(startListening, 400); };
+      recognition.onerror = (e) => {
+        isListening = false;
+        if (waitingFor && e.error !== "aborted") setTimeout(startListening, 350);
+      };
+      recognition.onend = () => {
+        isListening = false;
+        if (waitingFor) setTimeout(startListening, 250);
+      };
       return true;
     }
     async function enableMic() {
@@ -377,8 +467,15 @@
       }
     }
     function startListening() {
+      if (!recognition) initSpeech();
       if (!recognition || isListening || !waitingFor) return;
-      try { recognition.start(); isListening = true; } catch(e) { setTimeout(startListening, 800); }
+      try {
+        recognition.start();
+        isListening = true;
+        setInfo((document.getElementById("info").textContent || "") + "  · listening");
+      } catch(e) {
+        setTimeout(startListening, 350);
+      }
     }
     function stopListening() {
       if (recognition && isListening) { try { recognition.stop(); } catch(e){} isListening = false; }
@@ -393,40 +490,198 @@
       welcome: "006_youre_welcome.mp3",
       expectations: "007_youre_going_to_deepthroat_that_cock_for_me_every_time_your_n.mp3",
       begin: "008_good_begin_when_youre_ready.mp3",
-      reward1: "023_there_it_is_feel_that_thats_yours.mp3",
-      reward2: "024_good_boy_you_earned_that_vibration.mp3",
       stroke: "029_good_boy_you_earned_it_stroke_that_cock_for_me.mp3",
       stroke10: "030_you_can_stroke_it_now_ten_seconds.mp3",
+      strokeSlow: "031_hands_on_it_stroke_slowly_enjoy_it.mp3",
+      strokeBuzz: "032_thats_it_stroke_for_me_while_it_buzzes_in_your_ass.mp3",
       handsoff: "037_hands_off_now.mp3",
-      fail1: "040_i_didnt_say_you_could_pull_off.mp3",
-      noreward: "042_no_reward_for_that.mp3",
       slap: "044_slap_your_ass_five_times_hard_i_want_to_hear_it.mp3",
+      harder: "045_harder.mp3",
       enough: "048_good_thats_enough.mp3",
       backon: "049_now_get_back_on_that_cock_and_do_it_properly.mp3",
-      closer: "058_youre_getting_closer.mp3",
-      almost: "059_almost_there_keep_going.mp3",
+      dontfail: "050_dont_fail_me_again.mp3",
       earned: "067_alright_youve_earned_it.mp3",
       staydown_end: "068_stay_down_on_that_cock_dont_you_dare_pull_off.mp3",
       stroke_end: "069_stroke_that_cock_for_me_harder.mp3",
       choke_end: "070_choke_on_it_while_you_jerk_off_i_want_to_hear_you_struggle.mp3"
     };
 
-    function play(key) {
-      return new Promise((resolve) => {
-        const file = LINES[key];
+    const POOLS = {
+      hold: [
+        "010_deeper_yes_just_like_that.mp3",
+        "011_hold_it_stay_right_there.mp3",
+        "013_dont_you_dare_pull_off_until_i_say.mp3",
+        "017_youre_doing_so_well_for_me_keep_going.mp3",
+        "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3",
+        "019_thats_it_take_it_all.mp3",
+        "020_deeper.mp3",
+        "021_hold.mp3",
+        "022_stay.mp3"
+      ],
+      reward: [
+        "023_there_it_is_feel_that_thats_yours.mp3",
+        "024_good_boy_you_earned_that_vibration.mp3",
+        "025_stay_right_there_and_enjoy_it.mp3",
+        "026_mmm_look_at_you_taking_it_so_well.mp3",
+        "027_thats_my_good_boy.mp3",
+        "028_nice_keep_it_there.mp3",
+        "015_mmm_good_boy_thats_better.mp3"
+      ],
+      fail: [
+        "040_i_didnt_say_you_could_pull_off.mp3",
+        "041_no_thats_not_good_enough.mp3",
+        "042_no_reward_for_that.mp3",
+        "043_you_failed_me.mp3",
+        "055_that_wasnt_good_enough_keep_going.mp3"
+      ],
+      choke: [
+        "014_choke_on_it_for_me_let_me_hear_that_pretty_sound.mp3",
+        "010_deeper_yes_just_like_that.mp3",
+        "019_thats_it_take_it_all.mp3",
+        "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3",
+        "015_mmm_good_boy_thats_better.mp3"
+      ],
+      progress: [
+        "051_youre_not_ready_to_cum_yet.mp3",
+        "052_keep_earning_it.mp3",
+        "053_i_decide_when_you_get_to_finish.mp3",
+        "054_more_show_me_you_deserve_it.mp3",
+        "056_you_want_to_cum_then_stay_down_longer.mp3",
+        "057_earn_it_good_boy.mp3",
+        "058_youre_getting_closer.mp3",
+        "059_almost_there_keep_going.mp3",
+        "060_a_few_more_good_holds_and_you_might_earn_it.mp3",
+        "061_youre_close_now_dont_mess_it_up.mp3",
+        "063_youre_doing_better_keep_it_up.mp3",
+        "064_youre_right_on_the_edge_of_earning_it.mp3"
+      ]
+    };
+
+    const lastPlayed = {};
+    function pickFrom(poolName) {
+      const pool = POOLS[poolName];
+      if (!pool || !pool.length) return null;
+      let choice = pool[Math.floor(Math.random() * pool.length)];
+      if (pool.length > 1 && choice === lastPlayed[poolName]) {
+        choice = pool[(pool.indexOf(choice) + 1) % pool.length];
+      }
+      lastPlayed[poolName] = choice;
+      return choice;
+    }
+
+    function makeImpulse(ctx, seconds = 1.6, decay = 2.2) {
+      const rate = ctx.sampleRate;
+      const len = rate * seconds;
+      const impulse = ctx.createBuffer(2, len, rate);
+      for (let c = 0; c < 2; c++) {
+        const data = impulse.getChannelData(c);
+        for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+      return impulse;
+    }
+
+    async function ensureAudio() {
+      if (audioCtx) return audioCtx;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") await audioCtx.resume();
+
+      bgGain = audioCtx.createGain();
+      bgGain.gain.value = 0.14;
+      const merger = audioCtx.createChannelMerger(2);
+      const left = audioCtx.createOscillator();
+      const right = audioCtx.createOscillator();
+      const leftG = audioCtx.createGain();
+      const rightG = audioCtx.createGain();
+      left.frequency.value = 108;
+      right.frequency.value = 114; // 6Hz binaural
+      left.type = "sine";
+      right.type = "sine";
+      leftG.gain.value = 0.22;
+      rightG.gain.value = 0.22;
+      left.connect(leftG).connect(merger, 0, 0);
+      right.connect(rightG).connect(merger, 0, 1);
+
+      const pulse = audioCtx.createOscillator();
+      const pulseG = audioCtx.createGain();
+      pulse.frequency.value = 0.35;
+      pulse.type = "sine";
+      pulseG.gain.value = 0.08;
+      const throb = audioCtx.createGain();
+      throb.gain.value = 0.7;
+      pulse.connect(pulseG);
+      pulseG.connect(throb.gain);
+
+      const pad = audioCtx.createOscillator();
+      const padG = audioCtx.createGain();
+      pad.type = "triangle";
+      pad.frequency.value = 54;
+      padG.gain.value = 0.03;
+      pad.connect(padG);
+
+      merger.connect(throb);
+      padG.connect(throb);
+      throb.connect(bgGain);
+      bgGain.connect(audioCtx.destination);
+      left.start();
+      right.start();
+      pulse.start();
+      pad.start();
+
+      voiceGain = audioCtx.createGain();
+      voiceGain.gain.value = 1;
+      const conv = audioCtx.createConvolver();
+      conv.buffer = makeImpulse(audioCtx);
+      const wet = audioCtx.createGain();
+      wet.gain.value = 0.28;
+      const dry = audioCtx.createGain();
+      dry.gain.value = 0.86;
+      voiceGain.connect(dry).connect(audioCtx.destination);
+      voiceGain.connect(conv).connect(wet).connect(audioCtx.destination);
+      return audioCtx;
+    }
+
+    function duckBg(on) {
+      if (!bgGain || !audioCtx) return;
+      bgGain.gain.cancelScheduledValues(audioCtx.currentTime);
+      bgGain.gain.linearRampToValueAtTime(on ? 0.045 : (beatsOn ? 0.14 : 0), audioCtx.currentTime + 0.12);
+    }
+
+    async function toggleBeats() {
+      await ensureAudio();
+      beatsOn = !beatsOn;
+      if (bgGain) bgGain.gain.value = beatsOn ? 0.14 : 0;
+    }
+
+    function playFile(file) {
+      return new Promise(async (resolve) => {
         if (!file) { resolve(); return; }
         if (audio) { audio.pause(); audio = null; }
-        const path = `audio/${VOICES[currentVoice]}/${file}`;
-        log("▶ " + key);
+        const path = `audio/${VOICE}/${file}`;
+        log("▶ " + file);
+        await ensureAudio();
+        stopListening();
+        duckBg(true);
         audio = new Audio(path);
-        audio.onended = () => resolve();
-        audio.onerror = () => { log("FAILED " + path); resolve(); };
-        audio.play().catch(() => resolve());
+        audio.crossOrigin = "anonymous";
+        try {
+          const src = audioCtx.createMediaElementSource(audio);
+          src.connect(voiceGain);
+        } catch (e) {}
+        const done = () => { duckBg(false); if (waitingFor) setTimeout(startListening, 200); resolve(); };
+        audio.onended = done;
+        audio.onerror = () => { log("FAILED " + path); done(); };
+        audio.play().catch(done);
       });
+    }
+    function play(key) {
+      return playFile(LINES[key]);
+    }
+    function playPool(name) {
+      return playFile(pickFrom(name));
     }
 
     async function connectToy() {
-      const ip = document.getElementById("intiface-ip").value.trim() || "192.168.8.235";
+      const ip = document.getElementById("intiface-ip").value.trim() || "192.168.8.168";
       const address = `ws://${ip}:12345`;
       try {
         client = new ButtplugClient("Deepthroat Trainer");
@@ -460,13 +715,15 @@
         if (intensity <= 0) {
           if (typeof device.stop === "function") {
             await device.stop();
-            log("stop() OK");
             return;
           }
         }
+        if (vibeBan > 0 && intensity > 0) {
+          log("Vibe banned for " + vibeBan + " commands");
+          return;
+        }
         if (DeviceOutput && DeviceOutput.Vibrate && typeof device.runOutput === "function") {
           await device.runOutput(DeviceOutput.Vibrate.percent(intensity));
-          log("runOutput() OK");
           return;
         }
       } catch (e) {
@@ -489,6 +746,9 @@
       setTimeout(() => vibe(0), 2500);
     }
     async function stopAll() {
+      commandActive = false;
+      clearTimeout(nextCommandTimer);
+      clearInterval(holdTick);
       await vibe(0);
       if (audio) { audio.pause(); audio = null; }
       hideReplyButtons();
@@ -520,17 +780,27 @@
       const spike = highEnergy - prevEnergy;
       prevEnergy = highEnergy * 0.7 + prevEnergy * 0.3;
       const now = Date.now();
+      if (phase === "training" && isHolding && highEnergy > 36 && spike > 10 && now - lastChokeLine > 4500) {
+        lastChokeLine = now;
+        playPool("choke");
+      }
       if (phase === "punishment" && highEnergy > 48 && spike > 18 && now - lastSlapTime > 380) {
         lastSlapTime = now;
         slapCount++;
         setInfo(`Slaps ${slapCount} / ${slapTarget}`);
         vibe(0.25).then(() => setTimeout(() => vibe(0), 120));
         if (slapCount >= slapTarget) {
-          play("enough").then(() => {
-            play("backon");
+          play("enough").then(async () => {
+            if (punishKind === "slaps+nipples") {
+              setInfo("Now pinch your nipples. Hard.");
+              await new Promise(r => setTimeout(r, 4500));
+            }
+            await play("dontfail");
+            await play("backon");
             setPhase("training");
-            setInfo("Back on it.");
+            setInfo(vibeBan > 0 ? "No vibration for the next commands. Wait." : "Wait for her command.");
             slapCount = 0;
+            scheduleNextCommand(1200);
           });
         }
       }
@@ -539,69 +809,246 @@
 
     const nose = document.getElementById("nose-btn");
     const timerEl = document.getElementById("hold-timer");
+
+    function nextChallenge() {
+      const hold = Math.min(8, 3 + Math.floor(round / 3));
+      const deck = [
+        { type: "hold", secs: hold, files: ["011_hold_it_stay_right_there.mp3", "021_hold.mp3", "022_stay.mp3", "013_dont_you_dare_pull_off_until_i_say.mp3"], info: `Stay down ${hold}s. Don't come up.` },
+        { type: "reps", count: 5, maxGap: 950, minDown: 0.18, maxDown: 1.1, files: ["009_on_it.mp3", "016_again_deeper_this_time.mp3", "010_deeper_yes_just_like_that.mp3"], info: "5 deepthroats. Fast. No rest." },
+        { type: "reps", count: 4, maxGap: 800, minDown: 0.15, maxDown: 0.9, files: ["009_on_it.mp3", "020_deeper.mp3"], info: "4 quick ones. All the way down." },
+        { type: "slow", count: 3, maxGap: 2800, minDown: 1.1, maxDown: 4, files: ["011_hold_it_stay_right_there.mp3", "018_stay_down_feel_how_hard_its_buzzing_for_you.mp3"], info: "3 slow ones. Down, hold, up." },
+        { type: "hold", secs: hold + 1, files: ["012_five_four_three_two_one_stay.mp3", "013_dont_you_dare_pull_off_until_i_say.mp3"], info: `Hold through the count. ${hold + 1}s.` }
+      ];
+      if (round < 2) return deck[0];
+      return deck[round % deck.length];
+    }
+
+    async function issueCommand() {
+      if (phase !== "training") return;
+      challenge = nextChallenge();
+      repsDone = 0;
+      lastRepAt = 0;
+      commandActive = true;
+      commandIssuedAt = Date.now();
+      round += 1;
+      targetHold = challenge.secs || targetHold;
+      vibeMode = VIBE_MODES[round % VIBE_MODES.length];
+      lastCommandFile = challenge.files[Math.floor(Math.random() * challenge.files.length)];
+      tell(challenge.info);
+      timerEl.style.display = "block";
+      if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
+      else timerEl.textContent = "0 / " + challenge.count;
+      await playFile(lastCommandFile);
+      const modeLine = {
+        rise: "The longer you stay, the harder it buzzes.",
+        pulse: "Pulsing. Ride it.",
+        wave: "Waves. Stay through them.",
+        heartbeat: "Heartbeat. Match me.",
+        stagger: "On and off. Don't flinch."
+      }[vibeMode];
+      if (challenge.type === "hold") {
+        await playFile("012_five_four_three_two_one_stay.mp3");
+        speak(challenge.secs + " seconds. Stay. " + modeLine);
+      } else if (challenge.type === "reps") {
+        speak(challenge.count + " times. Fast. All the way down. " + modeLine);
+      } else if (challenge.type === "slow") {
+        speak(challenge.count + " slow ones. Down. Hold. Up. " + modeLine);
+      }
+      const elapsed = Date.now() - sessionStart;
+      if (elapsed - lastTimeCall > 4 * 60 * 1000) {
+        lastTimeCall = elapsed;
+        const left = Math.max(1, Math.round((SESSION_MS - elapsed) / 60000));
+        speak(left + " minutes left. Stay in it.");
+        playPool("progress");
+      }
+    }
+
+    function scheduleNextCommand(delay) {
+      clearTimeout(nextCommandTimer);
+      nextCommandTimer = setTimeout(issueCommand, delay);
+    }
+
+    function pickPunishment() {
+      const kinds = ["slaps", "nipples", "silent", "slaps+nipples", "silent+nipples"];
+      return kinds[Math.floor(Math.random() * kinds.length)];
+    }
+
+    async function failRound(reason) {
+      commandActive = false;
+      clearInterval(holdTick);
+      await vibe(0);
+      punishKind = pickPunishment();
+      vibeBan = (punishKind.includes("silent") || Math.random() < 0.35) ? 2 : 0;
+      setScore(score - 4);
+      await playPool("fail");
+      if (punishKind === "slaps") {
+        tell(reason + " Slap your ass.");
+        await play("slap");
+        setPhase("punishment");
+        slapCount = 0;
+        startMic();
+      } else if (punishKind === "nipples") {
+        tell(reason + " Pinch your nipples. Hard. Hold.");
+        setPhase("punishment");
+        setTimeout(async () => {
+          await play("enough");
+          await play("backon");
+          setPhase("training");
+          setInfo(vibeBan ? "Toy stays quiet. Wait for her." : "Wait for her command.");
+          scheduleNextCommand(1000);
+        }, 6000);
+      } else if (punishKind === "silent") {
+        vibeBan = 2;
+        tell(reason + " No vibration for 2 commands.");
+        await play("dontfail");
+        setPhase("training");
+        scheduleNextCommand(1200);
+      } else if (punishKind === "slaps+nipples") {
+        tell(reason + " Slaps first. Then nipples.");
+        await play("slap");
+        setPhase("punishment");
+        slapCount = 0;
+        startMic();
+      } else {
+        vibeBan = 2;
+        tell(reason + " Silent toy. Pinch your nipples.");
+        setPhase("punishment");
+        setTimeout(async () => {
+          await play("dontfail");
+          await play("backon");
+          setPhase("training");
+          setInfo("No vibe for 2 commands. Wait.");
+          scheduleNextCommand(1000);
+        }, 5500);
+      }
+    }
+
+    async function winRound(dur, reaction) {
+      commandActive = false;
+      clearInterval(holdTick);
+      if (vibeBan > 0) vibeBan -= 1;
+      if (vibeBan <= 0) {
+        await vibe(1);
+        setTimeout(() => vibe(0), 450);
+      } else {
+        await vibe(0);
+        tell("Still silenced. " + vibeBan + " commands without vibration.");
+      }
+      let gained = 8 + Math.floor(dur);
+      if (reaction < 1600) gained += 4;
+      setScore(score + gained);
+      await playPool("reward");
+      checkProgress();
+      if (phase === "training") {
+        targetHold = Math.min(10, targetHold + (round % 2 === 0 ? 1 : 0));
+        scheduleNextCommand(900);
+      }
+    }
+
     nose.addEventListener("touchstart", async e => {
       e.preventDefault();
-      if (phase !== "training" && phase !== "ending") return;
+      if (phase === "ending") {
+        isHolding = true;
+        await vibe(1);
+        return;
+      }
+      if (phase !== "training") return;
+      if (!commandActive || !challenge) {
+        setInfo("Wait for her command.");
+        await vibe(0);
+        return;
+      }
+      if ((challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
+        await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
+        return;
+      }
       isHolding = true;
       holdStart = Date.now();
       nose.classList.add("active");
       timerEl.style.display = "block";
-      timerEl.textContent = "0.0s";
-      holdTimerInterval = setInterval(() => {
-        timerEl.textContent = ((Date.now() - holdStart)/1000).toFixed(1) + "s";
-      }, 100);
-      await vibe(phase === "ending" ? 1.0 : 0.55);
+      clearInterval(holdTick);
+      if (challenge.type === "hold") {
+        holdTick = setInterval(async () => {
+          if (!isHolding || !commandActive) return;
+          const dur = (Date.now() - holdStart) / 1000;
+          timerEl.textContent = dur.toFixed(1) + " / " + challenge.secs + "s";
+          await vibe(vibePattern(dur, vibeMode));
+          if (Date.now() - lastCoach > 4200) {
+            lastCoach = Date.now();
+            if (Math.random() < 0.65) playPool("hold");
+            else speak(["Stay.", "Deeper.", "Don't come up.", "Good boy.", "Hold.", "Take it."][Math.floor(Math.random()*6)]);
+          }
+          if (dur >= challenge.secs) {
+            isHolding = false;
+            nose.classList.remove("active");
+            clearInterval(holdTick);
+            winRound(dur, holdStart - commandIssuedAt);
+          }
+        }, 120);
+      } else {
+        await vibe(vibePattern(repsDone + 0.4, vibeMode));
+      }
     });
     nose.addEventListener("touchend", async e => {
       e.preventDefault();
-      if (!isHolding) return;
+      if (!isHolding && phase !== "ending") {
+        await vibe(0);
+        return;
+      }
+      const wasHolding = isHolding;
       isHolding = false;
       nose.classList.remove("active");
-      clearInterval(holdTimerInterval);
-      timerEl.style.display = "none";
+      clearInterval(holdTick);
+      await vibe(0);
+      if (phase === "ending") return;
+      if (!wasHolding || !commandActive || !challenge) return;
       const dur = (Date.now() - holdStart) / 1000;
-      if (phase === "ending") { await vibe(0.7); return; }
-      if (dur < 1.8) {
-        await vibe(0);
-        setScore(score - 3);
-        await play("fail1");
-        await play("noreward");
-        await play("slap");
-        setPhase("punishment");
-        slapCount = 0;
-        setInfo(`Slap your ass ${slapTarget} times`);
-        startMic();
-      } else if (dur >= 9) {
-        await vibe(0.95);
-        setScore(score + 12);
-        await play("stroke");
-        await play("stroke10");
-        setInfo("Stroke for 10 seconds");
-        setTimeout(async () => {
-          await play("handsoff");
-          setInfo("");
-          await vibe(0.35);
-        }, 10000);
-        checkProgress();
-      } else {
-        await vibe(0.75);
-        setScore(score + Math.floor(dur * 1.5));
-        await play(Math.random() > 0.5 ? "reward1" : "reward2");
-        setTimeout(() => vibe(0.3), 3500);
-        checkProgress();
+      if (challenge.type === "hold") {
+        if (dur + 0.15 < challenge.secs) await failRound("You came off early. No vibration.");
+        return;
+      }
+      if (dur < challenge.minDown) {
+        await failRound("That wasn't all the way down.");
+        return;
+      }
+      if (challenge.type === "reps" && dur > challenge.maxDown) {
+        await failRound("Too slow. I wanted it fast.");
+        return;
+      }
+      if (challenge.type === "slow" && dur < challenge.minDown) {
+        await failRound("Too fast. Take it slow.");
+        return;
+      }
+      repsDone += 1;
+      lastRepAt = Date.now();
+      timerEl.textContent = repsDone + " / " + challenge.count;
+      await vibe(Math.min(1, 0.45 + repsDone * 0.12));
+      setTimeout(() => vibe(0), 180);
+      if (repsDone >= challenge.count) {
+        winRound(repsDone, Date.now() - commandIssuedAt);
+      } else if (repsDone === 1) {
+        playFile("010_deeper_yes_just_like_that.mp3");
+      } else if (repsDone === challenge.count - 1) {
+        playFile("016_again_deeper_this_time.mp3");
       }
     });
     nose.addEventListener("mousedown", () => nose.dispatchEvent(new Event("touchstart")));
     nose.addEventListener("mouseup", () => nose.dispatchEvent(new Event("touchend")));
 
     async function startSession() {
+      await ensureAudio();
       setScore(0);
       setPhase("setup");
       hideReplyButtons();
+      vibeBan = 0;
+      sessionStart = Date.now();
+      lastTimeCall = 0;
       await play("look");
+      tell("Hood on. Blindfold on. Then lube.");
       await play("lube");
-      setInfo("Answer her.");
+      tell("Say yes mistress.");
       showReplyButtons("yes");
+      startMic();
     }
     async function reply(type) {
       if (waitingFor !== type) return;
@@ -610,40 +1057,45 @@
       if (type === "yes") {
         await play("goodboy");
         await play("putin");
-        setInfo("Answer her.");
+        tell("Say it is in.");
         showReplyButtons("in");
       } else if (type === "in") {
         await play("thankyou");
-        setInfo("Answer her.");
+        tell("Say thank you mistress.");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
         await play("welcome");
         await play("expectations");
         await play("begin");
         setPhase("training");
-        setInfo("Hold the target with your nose.");
+        targetHold = 3;
+        round = 0;
+        sessionStart = Date.now();
+        tell("Sixty minutes. When I say on it, stay down.");
+        scheduleNextCommand(900);
       }
     }
     function checkProgress() {
-      if (score >= 45 && phase === "training") play("closer");
-      if (score >= 70 && phase === "training") play("almost");
-      if (score >= 95 && phase === "training") {
+      if (phase === "training" && Math.random() < 0.35) playPool("progress");
+      const longEnough = sessionStart && Date.now() - sessionStart >= SESSION_MS - 180000;
+      const mustEnd = sessionStart && Date.now() - sessionStart >= SESSION_MS;
+      if (phase === "training" && (mustEnd || (longEnough && score >= 70))) {
         setPhase("ending");
         play("earned").then(() => {
           play("staydown_end").then(() => {
-            play("stroke_end").then(() => {
-              play("choke_end");
-              setInfo("Stay down and finish.");
-              vibe(0.9);
+            play("stroke").then(() => {
+              play("stroke_end").then(() => {
+                play("choke_end");
+                setInfo("Now you may stroke. Stay down and finish.");
+                vibeBan = 0;
+                vibe(1);
+              });
             });
           });
         });
       }
     }
-    function cycleVoice() {
-      currentVoice = (currentVoice + 1) % VOICES.length;
-      document.getElementById("voice-label").textContent = VOICES[currentVoice];
-    }
+    function cycleVoice() {}
     function changeSlaps() {
       slapTarget = slapTarget === 5 ? 3 : slapTarget === 3 ? 8 : 5;
       document.getElementById("slap-num").textContent = slapTarget;
@@ -653,6 +1105,7 @@
     window.startSession = startSession;
     window.reply = reply;
     window.cycleVoice = cycleVoice;
+    window.toggleBeats = toggleBeats;
     window.connectToy = connectToy;
     window.testVibe = testVibe;
     window.enableMic = enableMic;
