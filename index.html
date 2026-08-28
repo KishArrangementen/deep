@@ -622,7 +622,7 @@
     };
     const POOLS = {
       hold: [10, 11, 13, 17, 18, 19, 20, 21, 22, 145, 146],
-      reward: [23, 24, 25, 26, 27, 28, 15, 102, 103],
+      reward: [23, 24, 27, 102, 103, 15],
       fail: [40, 41, 42, 43, 55, 104, 105, 107],
       choke: [14, 129, 130, 131, 132, 10, 19],
       progress: [51, 52, 53, 54, 56, 57, 58, 59, 60, 61, 63, 64, 125, 126, 127]
@@ -932,7 +932,7 @@
       const deck = [
         { type: "hold", secs: hold, files: [11, 21, 22, 13, 92], info: `Stay down ${hold}s. Don't come up.` },
         { type: "reps", count: 5, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [87, 88, 89, 9], info: "5 deepthroats. Nose on, off. That's one." },
-        { type: "reps", count: 4, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [109, 95, 20], info: "4 quick ones. Down and off." },
+        { type: "reps", count: 4, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [109, 95], info: "4 quick ones. Down and off each time." },
         { type: "slow", count: 3, maxGap: 4500, minDown: 0.7, maxDown: 5, files: [90, 91, 18], info: "3 slow ones. Down, stay, off." },
         { type: "hold", secs: hold + 1, files: [12, 93, 135], info: `Hold through the count. ${hold + 1}s.` }
       ];
@@ -974,6 +974,11 @@
 
     async function failRound(reason) {
       commandActive = false;
+      isHolding = false;
+      holdArmed = false;
+      letGoAllowed = false;
+      holdSeq += 1;
+      nose.classList.remove("active");
       clearInterval(holdTick);
       await vibe(0);
       punishKind = pickPunishment();
@@ -1024,6 +1029,11 @@
 
     async function winRound(dur, reaction) {
       commandActive = false;
+      isHolding = false;
+      holdArmed = false;
+      letGoAllowed = false;
+      holdSeq += 1;
+      nose.classList.remove("active");
       clearInterval(holdTick);
       if (vibeBan > 0) vibeBan -= 1;
       if (vibeBan <= 0) {
@@ -1061,7 +1071,18 @@
       }
       if (token !== holdSeq || !isHolding || !commandActive) return;
       letGoAllowed = true;
+      holdArmed = false;
       await play("comeUp");
+      setTimeout(() => {
+        if (token !== holdSeq || !commandActive || !letGoAllowed) return;
+        if (!isHolding) return;
+        isHolding = false;
+        holdArmed = false;
+        nose.classList.remove("active");
+        clearInterval(holdTick);
+        vibe(0);
+        winRound((Date.now() - holdStart) / 1000, holdStart - commandIssuedAt);
+      }, 1800);
     }
 
     async function runSlowHold(token) {
@@ -1070,6 +1091,7 @@
       await wait(2300 + repsDone * 250);
       if (token !== holdSeq || !isHolding || !commandActive) return;
       letGoAllowed = true;
+      holdArmed = false;
       const keys = ["slow1", "slow2", "slow3"];
       await play(keys[Math.min(repsDone, 2)]);
     }
@@ -1127,7 +1149,7 @@
         nose.classList.add("active");
         return;
       }
-      if (isHolding && holdArmed) return;
+      if (isHolding && holdArmed && !letGoAllowed) return;
       if (repsDone > 0 && (challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
         await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
         return;
@@ -1196,6 +1218,12 @@
       vibe(0);
       if (dur < 0.08) return;
       if (challenge.type === "slow" && !letGoAllowed) {
+        if (dur < 0.4) {
+          isHolding = false;
+          holdArmed = false;
+          nose.classList.remove("active");
+          return;
+        }
         cancelHoldSeq();
         await failRound("I didn't say let go.");
         return;
@@ -1235,6 +1263,11 @@
     });
     nose.addEventListener("pointerup", (e) => {
       if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchend"));
+    });
+    ["touchcancel", "pointercancel", "pointerleave"].forEach(ev => {
+      nose.addEventListener(ev, () => {
+        if (isHolding || letGoAllowed) nose.dispatchEvent(new Event("touchend"));
+      });
     });
     document.getElementById("dead-zone").addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 
