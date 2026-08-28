@@ -285,7 +285,9 @@
   <script type="module">
     import {
       ButtplugClient,
-      ButtplugBrowserWebsocketClientConnector
+      ButtplugBrowserWebsocketClientConnector,
+      DeviceOutput,
+      OutputType
     } from "https://cdn.jsdelivr.net/npm/buttplug@5/dist/web/buttplug.mjs";
 
     const VOICES = ["domi", "charlotte", "rachel"];
@@ -424,7 +426,7 @@
     }
 
     async function connectToy() {
-      const ip = document.getElementById("intiface-ip").value.trim() || "192.168.8.168";
+      const ip = document.getElementById("intiface-ip").value.trim() || "192.168.8.235";
       const address = `ws://${ip}:12345`;
       try {
         client = new ButtplugClient("Deepthroat Trainer");
@@ -448,12 +450,38 @@
     }
 
     async function vibe(intensity) {
-      if (!device) return;
+      if (!device) {
+        log("No device");
+        return;
+      }
       intensity = Math.max(0, Math.min(1, intensity));
-      try { await device.vibrate(intensity); return; } catch (e) { log("vibrate() " + (e.message || e)); }
-      try { await device.scalar([{ Index: 0, Scalar: intensity, ActuatorType: "Vibrate" }]); return; } catch (e) {}
-      try { await device.vibrate([intensity, intensity]); return; } catch (e) {}
-      if (intensity === 0 && device.stop) { try { await device.stop(); } catch (e) {} }
+      log("Vibe → " + intensity.toFixed(2));
+      try {
+        if (intensity <= 0) {
+          if (typeof device.stop === "function") {
+            await device.stop();
+            log("stop() OK");
+            return;
+          }
+        }
+        if (DeviceOutput && DeviceOutput.Vibrate && typeof device.runOutput === "function") {
+          await device.runOutput(DeviceOutput.Vibrate.percent(intensity));
+          log("runOutput() OK");
+          return;
+        }
+      } catch (e) {
+        log("runOutput error: " + (e.message || e));
+      }
+      try {
+        if (typeof device.vibrate === "function") {
+          await device.vibrate(intensity);
+          log("vibrate() OK");
+          return;
+        }
+      } catch (e) {
+        log("vibrate() " + (e.message || e));
+      }
+      log("Vibration failed");
     }
     async function testVibe() {
       setInfo("Testing vibration.");
