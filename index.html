@@ -1050,23 +1050,24 @@
     }
 
     async function runHoldCount(secs, token) {
+      await play("holdNow");
+      if (token !== holdSeq || !isHolding || !commandActive) return;
       const keys = ["c1", "c2", "c3", "c4", "c5"];
       for (let i = 1; i <= secs; i++) {
-        await wait(1050);
+        await wait(1100);
         if (token !== holdSeq || !isHolding || !commandActive) return;
         timerEl.textContent = i + " / " + secs;
-        play(keys[i - 1]);
+        await play(keys[i - 1]);
       }
-      await wait(700);
       if (token !== holdSeq || !isHolding || !commandActive) return;
       letGoAllowed = true;
       await play("comeUp");
     }
 
     async function runSlowHold(token) {
-      play("holdNow");
-      const stay = 2300 + repsDone * 250;
-      await wait(stay);
+      await play("holdNow");
+      if (token !== holdSeq || !isHolding || !commandActive) return;
+      await wait(2300 + repsDone * 250);
       if (token !== holdSeq || !isHolding || !commandActive) return;
       letGoAllowed = true;
       const keys = ["slow1", "slow2", "slow3"];
