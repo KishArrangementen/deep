@@ -618,7 +618,11 @@
       c5: "n23_five.mp3",
       holdIntro: "n24_hold_intro.mp3",
       holdNow: "n25_hold_now.mp3",
-      comeUp: "n26_come_up.mp3"
+      comeUp: "n26_come_up.mp3",
+      failSpace: "n27_too_much_space.mp3",
+      failEarly: "n28_came_off_early.mp3",
+      failLetGo: "n29_didnt_say_let_go.mp3",
+      failSlow: "n30_too_slow.mp3"
     };
     const POOLS = {
       hold: [10, 11, 13, 17, 18, 19, 20, 21, 22, 145, 146],
@@ -933,7 +937,7 @@
         { type: "hold", secs: hold, files: [11, 21, 22, 13, 92], info: `Stay down ${hold}s. Don't come up.` },
         { type: "reps", count: 5, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [87, 88, 89, 9], info: "5 deepthroats. Nose on, off. That's one." },
         { type: "reps", count: 4, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [109, 95], info: "4 quick ones. Down and off each time." },
-        { type: "slow", count: 3, maxGap: 4500, minDown: 0.7, maxDown: 5, files: [90, 91, 18], info: "3 slow ones. Down, stay, off." },
+        { type: "slow", count: 3, maxGap: 7000, minDown: 0.7, maxDown: 5, files: [90, 91, 18], info: "3 slow ones. Down, stay, off." },
         { type: "hold", secs: hold, files: [12, 93, 135], info: `Hold through the count. ${hold}s.` }
       ];
       if (round < 2) return deck[0];
@@ -984,7 +988,12 @@
       punishKind = pickPunishment();
       vibeBan = (punishKind.includes("silent") || Math.random() < 0.35) ? 2 : 0;
       setScore(score - 4);
-      await playPool("fail");
+      const r = (reason || "").toLowerCase();
+      if (r.includes("space") || r.includes("rhythm")) await play("failSpace");
+      else if (r.includes("early")) await play("failEarly");
+      else if (r.includes("let go")) await play("failLetGo");
+      else if (r.includes("slow") || r.includes("fast")) await play("failSlow");
+      else await playPool("fail");
       if (punishKind === "slaps") {
         tell(reason + " Slap your ass.");
         await play("slap");
@@ -1060,6 +1069,7 @@
     }
 
     async function runHoldCount(secs, token) {
+      secs = Math.min(5, Math.max(3, secs || 3));
       await play("holdNow");
       if (token !== holdSeq || !isHolding || !commandActive) return;
       const keys = ["c1", "c2", "c3", "c4", "c5"];
@@ -1067,7 +1077,7 @@
         await wait(1100);
         if (token !== holdSeq || !isHolding || !commandActive) return;
         timerEl.textContent = i + " / " + secs;
-        await play(keys[i - 1]);
+        if (keys[i - 1]) await play(keys[i - 1]);
       }
       if (token !== holdSeq || !isHolding || !commandActive) return;
       letGoAllowed = true;
@@ -1129,8 +1139,6 @@
 
     nose.addEventListener("touchstart", async e => {
       e.preventDefault();
-      clearTimeout(bounceTimer);
-      bounceTimer = null;
       if (phase === "ending") {
         isHolding = true;
         await vibe(1);
@@ -1142,12 +1150,14 @@
         await vibe(0);
         return;
       }
-      if (bounceTimer && challenge && challenge.type === "hold" && holdArmed) {
+      if (bounceTimer) {
         clearTimeout(bounceTimer);
         bounceTimer = null;
-        isHolding = true;
-        nose.classList.add("active");
-        return;
+        if (challenge.type === "hold" && (holdArmed || letGoAllowed)) {
+          isHolding = true;
+          nose.classList.add("active");
+          return;
+        }
       }
       if (isHolding && holdArmed && !letGoAllowed) return;
       if (repsDone > 0 && (challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
@@ -1264,7 +1274,7 @@
     nose.addEventListener("pointerup", (e) => {
       if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchend"));
     });
-    ["touchcancel", "pointercancel", "pointerleave"].forEach(ev => {
+    ["touchcancel", "pointercancel"].forEach(ev => {
       nose.addEventListener(ev, () => {
         if (isHolding || letGoAllowed) nose.dispatchEvent(new Event("touchend"));
       });
