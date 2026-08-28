@@ -38,46 +38,24 @@
     #app {
       height: 100dvh;
       display: grid;
-      grid-template-rows: auto auto 1fr;
+      grid-template-rows: auto 1fr;
       padding-top: var(--safe-t);
     }
 
-    header {
-      padding: 8px 12px 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .brand {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .brand small {
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      font-size: 10px;
-      color: var(--muted);
-    }
-    .brand strong {
-      font-size: 17px;
-      font-weight: 560;
-      letter-spacing: -0.02em;
-    }
     .chips {
       display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+      gap: 4px;
+      flex-wrap: nowrap;
+      align-items: center;
     }
     .chip {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--muted);
       background: var(--bg-elev);
       border: 1px solid var(--line);
-      padding: 6px 9px;
+      padding: 4px 7px;
       border-radius: 999px;
+      white-space: nowrap;
     }
     .chip.on { color: var(--ok); border-color: rgba(125,190,138,0.35); }
     .chip.warn { color: var(--warn); }
@@ -198,29 +176,32 @@
       text-transform: none;
     }
 
-    #toolbar {
-      padding: 6px 10px 8px;
+    #topbar {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 6px;
+      overflow-x: auto;
+      overflow-y: hidden;
       background: rgba(11,11,12,0.96);
       border-bottom: 1px solid var(--line);
       z-index: 40;
+      -webkit-overflow-scrolling: touch;
     }
-    .primary-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    header, #toolbar, .btn, #reply-buttons, input {
+    #topbar, .btn, #reply-buttons, input {
       touch-action: manipulation;
     }
     .btn {
       border: 1px solid var(--line);
       background: var(--bg-elev);
       color: var(--text);
-      border-radius: 14px;
-      padding: 11px 12px;
-      font-size: 13px;
+      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 11px;
       font-weight: 560;
+      white-space: nowrap;
+      flex: 0 0 auto;
     }
     .btn.primary {
       background: var(--text);
@@ -229,62 +210,36 @@
     }
     .btn.ghost { color: var(--muted); }
     .btn.danger { color: #f0c7c7; }
-    .tray {
-      display: grid;
-      grid-template-columns: 1.2fr auto auto auto auto;
-      gap: 6px;
-    }
-    .tray input {
-      width: 100%;
-      min-width: 0;
+    #intiface-ip {
+      width: 108px;
+      min-width: 108px;
       background: var(--bg-soft);
       border: 1px solid var(--line);
       color: var(--text);
-      border-radius: 12px;
-      padding: 11px 10px;
-      font-size: 12px;
+      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: 11px;
+      flex: 0 0 auto;
     }
-    .tray .btn { padding: 11px 10px; font-size: 12px; }
     .tray.hidden, .live-hide { display: none !important; }
-    #toolbar.live .primary-row { grid-template-columns: 1fr auto; }
-    #toolbar.live #btn-begin, #toolbar.live #btn-test { display: none; }
-    @media (max-width: 420px) {
-      .tray { grid-template-columns: 1fr 1fr 1fr; }
-      .tray input { grid-column: 1 / -1; }
-    }
   </style>
 </head>
 <body>
   <div id="app">
-    <header>
-      <div class="brand">
-        <small>Private session</small>
-        <strong>Trainer</strong>
-      </div>
-      <div class="chips">
-        <div class="chip" id="phase">Idle</div>
-        <div class="chip" id="score">0</div>
-        <div class="chip" id="toy-status">Toy off</div>
-        <div class="chip" id="voice-label">Domi</div>
-      </div>
-    </header>
-
-    <div id="toolbar">
-      <div class="primary-row">
-        <button class="btn primary" id="btn-begin" onclick="startSession()">Begin session</button>
-        <button class="btn ghost" id="btn-pause" onclick="pauseSession()">Pause</button>
-        <button class="btn primary" id="btn-resume" onclick="resumeSession()">Resume</button>
-        <button class="btn danger" id="btn-stop" onclick="stopAll()">End</button>
-        <button class="btn ghost" id="btn-setup" onclick="toggleSetup()">Setup</button>
-      </div>
-      <div class="tray" id="setup-tray">
-        <input id="intiface-ip" type="text" value="192.168.8.235" placeholder="Intiface IP">
-        <button class="btn" onclick="connectToy()">Connect</button>
-        <button class="btn" id="btn-test" onclick="testVibe()">Test</button>
-        <button class="btn ghost" onclick="toggleBeats()">Beats</button>
-        <button class="btn ghost" onclick="enableMic()">Mic</button>
-        <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
-      </div>
+    <div id="topbar">
+      <div class="chip" id="phase">Idle</div>
+      <div class="chip" id="score">0</div>
+      <div class="chip" id="toy-status">Toy off</div>
+      <button class="btn primary" id="btn-begin" onclick="startSession()">Begin</button>
+      <button class="btn ghost" id="btn-pause" onclick="pauseSession()">Pause</button>
+      <button class="btn primary" id="btn-resume" onclick="resumeSession()">Resume</button>
+      <button class="btn danger" id="btn-stop" onclick="stopAll()">End</button>
+      <input id="intiface-ip" type="text" value="192.168.8.235" placeholder="IP">
+      <button class="btn" onclick="connectToy()">Connect</button>
+      <button class="btn" id="btn-test" onclick="testVibe()">Test</button>
+      <button class="btn ghost" onclick="toggleBeats()">Beats</button>
+      <button class="btn ghost" onclick="enableMic()">Mic</button>
+      <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
     </div>
 
     <section id="stage">
@@ -406,24 +361,13 @@
     }
     let setupOpen = true;
     function refreshChrome() {
-      const inPlay = phase === "training" || phase === "ending" || phase === "punishment" || phase === "setup";
-      const tray = document.getElementById("setup-tray");
-      const bar = document.getElementById("toolbar");
-      const collapsed = inPlay && !setupOpen;
-      tray.classList.toggle("hidden", collapsed);
-      bar.classList.toggle("live", collapsed);
-      document.getElementById("log").style.display = collapsed ? "none" : "";
+      document.getElementById("log").style.display = "none";
       const playing = phase === "training" || phase === "ending" || phase === "punishment" || phase === "setup";
       document.getElementById("btn-begin").style.display = (phase === "idle") ? "" : "none";
       document.getElementById("btn-pause").style.display = playing ? "" : "none";
       document.getElementById("btn-resume").style.display = phase === "paused" ? "" : "none";
     }
-    function toggleSetup() {
-      setupOpen = !setupOpen;
-      const tray = document.getElementById("setup-tray");
-      tray.classList.toggle("hidden", !setupOpen);
-      document.getElementById("toolbar").classList.toggle("live", !setupOpen && phase !== "idle");
-    }
+    function toggleSetup() {}
     function setToyStatus(t) {
       const el = document.getElementById("toy-status");
       el.textContent = t;
@@ -949,6 +893,9 @@
 
     async function issueCommand() {
       if (phase !== "training") return;
+      winLock = false;
+      endingHold = false;
+      resetHoldVisual();
       challenge = nextChallenge();
       repsDone = 0;
       lastRepAt = 0;
@@ -961,12 +908,12 @@
       timerEl.style.display = "block";
       if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
       else timerEl.textContent = "0 / " + challenge.count;
-      if (challenge.type === "hold") await playSlow("holdIntro");
-      else if (challenge.type === "slow") await playSlow("slowIntro");
-      else if (challenge.count === 5) await playSlow("fast5");
-      else await playSlow("fast4");
-      await wait(400);
+      if (challenge.type === "hold") await play("holdIntro");
+      else if (challenge.type === "slow") await play("slowIntro");
+      else if (challenge.count === 5) await play("fast5");
+      else await play("fast4");
       commandActive = true;
+      if (lastContactAt && Date.now() - lastContactAt < 400) beginHold();
     }
 
     function scheduleNextCommand(delay) {
@@ -1039,11 +986,15 @@
       }
     }
 
+    let winLock = false;
     async function winRound(dur, reaction) {
+      if (winLock) return;
+      winLock = true;
       commandActive = false;
       isHolding = false;
       holdArmed = false;
       letGoAllowed = false;
+      endingHold = false;
       holdSeq += 1;
       nose.classList.remove("active");
       clearInterval(holdTick);
@@ -1062,8 +1013,9 @@
       checkProgress();
       if (phase === "training") {
         targetHold = Math.min(10, targetHold + (round % 2 === 0 ? 1 : 0));
-        scheduleNextCommand(5500);
+        scheduleNextCommand(4500);
       }
+      setTimeout(() => { winLock = false; }, 800);
     }
 
     function cancelHoldSeq() {
@@ -1086,16 +1038,10 @@
       letGoAllowed = true;
       holdArmed = false;
       await play("comeUp");
-      setTimeout(() => {
-        if (token !== holdSeq || !commandActive || !letGoAllowed) return;
-        if (!isHolding) return;
-        isHolding = false;
-        holdArmed = false;
-        nose.classList.remove("active");
-        clearInterval(holdTick);
-        vibe(0);
-        winRound((Date.now() - holdStart) / 1000, holdStart - commandIssuedAt);
-      }, 1800);
+      if (token !== holdSeq) return;
+      resetHoldVisual();
+      await vibe(0);
+      winRound((Date.now() - holdStart) / 1000, holdStart - commandIssuedAt);
     }
 
     async function runSlowHold(token) {
@@ -1107,6 +1053,14 @@
       holdArmed = false;
       const keys = ["slow1", "slow2", "slow3"];
       await play(keys[Math.min(repsDone, 2)]);
+      setTimeout(() => {
+        if (token !== holdSeq || !commandActive || !letGoAllowed) return;
+        if (isHolding) return;
+        repsDone += 1;
+        lastRepAt = Date.now();
+        timerEl.textContent = repsDone + " / " + challenge.count;
+        if (repsDone >= challenge.count) winRound(repsDone, Date.now() - commandIssuedAt);
+      }, 900);
     }
 
     function resetHoldVisual() {
@@ -1155,7 +1109,10 @@
       }
     }
 
+    let lastPressAt = 0;
     async function onPress(e) {
+      if (Date.now() - lastPressAt < 90 && (isHolding || holdArmed || armTimer)) return;
+      lastPressAt = Date.now();
       endingHold = false;
       lastContactAt = Date.now();
       if (e && e.pointerId != null) {
@@ -1295,9 +1252,24 @@
     }
     nose.addEventListener("pointerup", handlePointerEnd);
     nose.addEventListener("pointercancel", handlePointerEnd);
-    document.addEventListener("pointerup", (e) => {
-      if (isHolding || holdArmed || armTimer) onRelease();
-    }, { passive: true });
+    nose.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      lastContactAt = Date.now();
+      onPress(e.changedTouches ? e.changedTouches[0] : e);
+    }, { passive: false });
+    nose.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      onRelease();
+    }, { passive: false });
+    nose.addEventListener("touchcancel", (e) => {
+      e.preventDefault();
+      onRelease();
+    }, { passive: false });
+    nose.addEventListener("click", () => {
+      if (!commandActive || isHolding) return;
+      lastContactAt = Date.now();
+      onPress({});
+    });
     setInterval(() => {
       if (!isHolding && !holdArmed) return;
       if (capturedPointer != null) return;
