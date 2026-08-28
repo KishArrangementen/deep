@@ -356,8 +356,10 @@
     let holdArmed = false;
     let armTimer = null;
     let bounceTimer = null;
-    const ARM_MS = 280;
-    const BOUNCE_MS = 320;
+    const ARM_MS = 180;
+    const BOUNCE_MS = 280;
+    let letGoAllowed = false;
+    let holdSeq = 0;
 
     function vibePattern(t, mode) {
       const climb = Math.min(1, 0.28 + t * 0.12);
@@ -614,7 +616,9 @@
       c3: "n21_three.mp3",
       c4: "n22_four.mp3",
       c5: "n23_five.mp3",
-      holdIntro: "n24_hold_intro.mp3"
+      holdIntro: "n24_hold_intro.mp3",
+      holdNow: "n25_hold_now.mp3",
+      comeUp: "n26_come_up.mp3"
     };
     const POOLS = {
       hold: [10, 11, 13, 17, 18, 19, 20, 21, 22, 145, 146],
@@ -950,12 +954,10 @@
       timerEl.style.display = "block";
       if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
       else timerEl.textContent = "0 / " + challenge.count;
-      await playFile(lastCommandFile);
-      await wait(700);
       if (challenge.type === "hold") await playSlow("holdIntro");
       else if (challenge.type === "slow") await playSlow("slowIntro");
       else if (challenge.count === 5) await playSlow("fast5");
-      else if (challenge.count === 4) await playSlow("fast4");
+      else await playSlow("fast4");
       await wait(400);
       commandActive = true;
     }
@@ -1042,38 +1044,61 @@
       }
     }
 
+    function cancelHoldSeq() {
+      holdSeq += 1;
+      letGoAllowed = false;
+    }
+
+    async function runHoldCount(secs, token) {
+      const keys = ["c1", "c2", "c3", "c4", "c5"];
+      for (let i = 1; i <= secs; i++) {
+        await wait(1050);
+        if (token !== holdSeq || !isHolding || !commandActive) return;
+        timerEl.textContent = i + " / " + secs;
+        play(keys[i - 1]);
+      }
+      await wait(700);
+      if (token !== holdSeq || !isHolding || !commandActive) return;
+      letGoAllowed = true;
+      await play("comeUp");
+    }
+
+    async function runSlowHold(token) {
+      play("holdNow");
+      const stay = 2300 + repsDone * 250;
+      await wait(stay);
+      if (token !== holdSeq || !isHolding || !commandActive) return;
+      letGoAllowed = true;
+      const keys = ["slow1", "slow2", "slow3"];
+      await play(keys[Math.min(repsDone, 2)]);
+    }
+
     function beginHold() {
       if (!commandActive || !challenge || phase !== "training") return;
       holdArmed = true;
       isHolding = true;
       holdStart = Date.now();
+      letGoAllowed = false;
+      holdSeq += 1;
+      const token = holdSeq;
       nose.classList.add("active");
       timerEl.style.display = "block";
       clearInterval(holdTick);
       if (challenge.type === "hold") {
-        holdTick = setInterval(async () => {
+        timerEl.textContent = "0 / " + challenge.secs;
+        holdTick = setInterval(() => {
           if (!isHolding || !commandActive) return;
           const dur = (Date.now() - holdStart) / 1000;
-          timerEl.textContent = dur.toFixed(1) + " / " + challenge.secs + "s";
-          await vibe(vibePattern(dur, vibeMode));
-          if (Date.now() - lastCoach > 9000) {
-            lastCoach = Date.now();
-            if (Math.random() < 0.35) playPool("hold");
-          }
-          if (dur >= challenge.secs) {
-            isHolding = false;
-            holdArmed = false;
-            nose.classList.remove("active");
-            clearInterval(holdTick);
-            winRound(dur, holdStart - commandIssuedAt);
-          }
-        }, 120);
+          vibe(vibePattern(dur, vibeMode));
+        }, 140);
+        runHoldCount(challenge.secs, token);
       } else if (challenge.type === "slow") {
         holdTick = setInterval(() => {
           if (!isHolding || !commandActive) return;
           const dur = (Date.now() - holdStart) / 1000;
           vibe(Math.min(1, 0.3 + dur * 0.25));
         }, 140);
+        runSlowHold(token);
       } else {
         vibe(0.55 + Math.min(0.35, repsDone * 0.08));
       }
@@ -1140,14 +1165,24 @@
         return;
       }
       if (challenge.type === "hold") {
-        bounceTimer = setTimeout(async () => {
-          if (isHolding) return;
-          const dur = (Date.now() - holdStart) / 1000;
+        if (letGoAllowed) {
+          cancelHoldSeq();
+          isHolding = false;
           holdArmed = false;
           nose.classList.remove("active");
           clearInterval(holdTick);
           await vibe(0);
-          if (dur + 0.2 < challenge.secs) await failRound("You came off early. No vibration.");
+          winRound((Date.now() - holdStart) / 1000, holdStart - commandIssuedAt);
+          return;
+        }
+        bounceTimer = setTimeout(async () => {
+          if (isHolding || letGoAllowed) return;
+          cancelHoldSeq();
+          holdArmed = false;
+          nose.classList.remove("active");
+          clearInterval(holdTick);
+          await vibe(0);
+          await failRound("I didn't say let go.");
         }, BOUNCE_MS);
         isHolding = false;
         return;
@@ -1159,9 +1194,13 @@
       clearInterval(holdTick);
       vibe(0);
       if (dur < 0.08) return;
-      if (challenge.type === "slow" && dur < challenge.minDown) {
-        await failRound("Too fast. Take it slow.");
+      if (challenge.type === "slow" && !letGoAllowed) {
+        cancelHoldSeq();
+        await failRound("I didn't say let go.");
         return;
+      }
+      if (challenge.type === "slow") {
+        cancelHoldSeq();
       }
       if (challenge.type === "reps" && dur < challenge.minDown) return;
       if (challenge.type === "reps" && dur > challenge.maxDown) {
@@ -1178,11 +1217,11 @@
         vibe(0.75);
         setTimeout(() => vibe(0), 90);
       }
-      const slowCounts = ["slow1", "slow2", "slow3"];
-      const fastCounts = ["c1", "c2", "c3", "c4", "c5"];
-      const key = challenge.type === "slow"
-        ? slowCounts[Math.min(repsDone - 1, 2)]
-        : fastCounts[Math.min(repsDone - 1, 4)];
+      if (challenge.type === "slow") {
+        if (repsDone >= challenge.count) winRound(repsDone, Date.now() - commandIssuedAt);
+        return;
+      }
+      const key = ["c1", "c2", "c3", "c4", "c5"][Math.min(repsDone - 1, 4)];
       if (repsDone >= challenge.count) {
         await play(key);
         winRound(repsDone, Date.now() - commandIssuedAt);
@@ -1208,9 +1247,7 @@
       sessionStart = Date.now();
       lastTimeCall = 0;
       await playSlow("look");
-      await playSlow("listenOnly");
       await playSlow("hoodAsk");
-      await playSlow("sayYes");
       showReplyButtons("yes");
       startMic();
     }
@@ -1221,25 +1258,15 @@
       hideReplyButtons();
       setInfo("");
       if (type === "yes") {
-        await playSlow("goodboy");
         await playSlow("lube");
         await playSlow("toyIn");
         showReplyButtons("in");
       } else if (type === "in") {
-        await playSlow("thankyou");
-        await playSlow("whatSay");
         await playSlow("sayThanks");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
-        await playSlow("welcome");
-        await playSlow("answerOut");
-        await playSlow("handsOff");
         await playSlow("onButton");
-        await playSlow("ifYouFail");
-        await playSlow("waitForMe");
-        await playSlow("expectations");
         await playSlow("begin");
-        await playSlow("breathe");
         setPhase("training");
         targetHold = 3;
         round = 0;
