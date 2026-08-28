@@ -245,6 +245,9 @@
       font-size: 12px;
     }
     .tray .btn { padding: 11px 10px; font-size: 12px; }
+    .tray.hidden, .live-hide { display: none !important; }
+    #toolbar.live .primary-row { grid-template-columns: 1fr auto; }
+    #toolbar.live #btn-begin, #toolbar.live #btn-test { display: none; }
     @media (max-width: 420px) {
       .tray { grid-template-columns: 1fr 1fr 1fr; }
       .tray input { grid-column: 1 / -1; }
@@ -268,13 +271,16 @@
 
     <div id="toolbar">
       <div class="primary-row">
-        <button class="btn primary" onclick="startSession()">Begin session</button>
-        <button class="btn danger" onclick="stopAll()">Stop</button>
+        <button class="btn primary" id="btn-begin" onclick="startSession()">Begin session</button>
+        <button class="btn ghost" id="btn-pause" onclick="pauseSession()">Pause</button>
+        <button class="btn primary" id="btn-resume" onclick="resumeSession()">Resume</button>
+        <button class="btn danger" id="btn-stop" onclick="stopAll()">End</button>
+        <button class="btn ghost" id="btn-setup" onclick="toggleSetup()">Setup</button>
       </div>
-      <div class="tray">
+      <div class="tray" id="setup-tray">
         <input id="intiface-ip" type="text" value="192.168.8.235" placeholder="Intiface IP">
         <button class="btn" onclick="connectToy()">Connect</button>
-        <button class="btn" onclick="testVibe()">Test</button>
+        <button class="btn" id="btn-test" onclick="testVibe()">Test</button>
         <button class="btn ghost" onclick="toggleBeats()">Beats</button>
         <button class="btn ghost" onclick="enableMic()">Mic</button>
         <button class="btn ghost" onclick="changeSlaps()">Slaps <span id="slap-num">5</span></button>
@@ -347,6 +353,11 @@
     const VIBE_MODES = ["rise", "pulse", "wave", "heartbeat", "stagger"];
     let vibeMode = "rise";
     let lastCoach = 0;
+    let holdArmed = false;
+    let armTimer = null;
+    let bounceTimer = null;
+    const ARM_MS = 280;
+    const BOUNCE_MS = 320;
 
     function vibePattern(t, mode) {
       const climb = Math.min(1, 0.28 + t * 0.12);
@@ -370,6 +381,9 @@
       el.textContent = p;
       el.classList.toggle("on", p === "training" || p === "ending");
       el.classList.toggle("warn", p === "punishment");
+      if (p === "training" || p === "ending" || p === "punishment") setupOpen = false;
+      if (p === "idle") setupOpen = true;
+      refreshChrome();
     }
     function setScore(s) {
       score = Math.max(0, s);
@@ -384,6 +398,26 @@
     function tell(text) {
       setInfo(text);
       speak(text);
+    }
+    let setupOpen = true;
+    function refreshChrome() {
+      const inPlay = phase === "training" || phase === "ending" || phase === "punishment" || phase === "setup";
+      const tray = document.getElementById("setup-tray");
+      const bar = document.getElementById("toolbar");
+      const collapsed = inPlay && !setupOpen;
+      tray.classList.toggle("hidden", collapsed);
+      bar.classList.toggle("live", collapsed);
+      document.getElementById("log").style.display = collapsed ? "none" : "";
+      const playing = phase === "training" || phase === "ending" || phase === "punishment" || phase === "setup";
+      document.getElementById("btn-begin").style.display = (phase === "idle") ? "" : "none";
+      document.getElementById("btn-pause").style.display = playing ? "" : "none";
+      document.getElementById("btn-resume").style.display = phase === "paused" ? "" : "none";
+    }
+    function toggleSetup() {
+      setupOpen = !setupOpen;
+      const tray = document.getElementById("setup-tray");
+      tray.classList.toggle("hidden", !setupOpen);
+      document.getElementById("toolbar").classList.toggle("live", !setupOpen && phase !== "idle");
     }
     function setToyStatus(t) {
       const el = document.getElementById("toy-status");
@@ -702,6 +736,8 @@
         client.addListener("deviceadded", d => {
           device = d;
           setToyStatus(d.name || d.displayName || "Connected");
+          document.getElementById("btn-test").style.display = "none";
+          refreshChrome();
         });
         client.addListener("deviceremoved", () => {
           device = null;
@@ -759,6 +795,31 @@
       await vibe(0.8);
       setTimeout(() => vibe(0), 2500);
     }
+    let pausedFrom = "training";
+    async function pauseSession() {
+      if (phase === "idle" || phase === "paused") return;
+      pausedFrom = phase;
+      commandActive = false;
+      clearTimeout(nextCommandTimer);
+      clearInterval(holdTick);
+      clearInterval(holdTimerInterval);
+      isHolding = false;
+      await vibe(0);
+      if (audio) { audio.pause(); }
+      hideReplyButtons();
+      setPhase("paused");
+      setInfo("Paused. Resume or End.");
+      setupOpen = true;
+      refreshChrome();
+    }
+    async function resumeSession() {
+      if (phase !== "paused") return;
+      setPhase(pausedFrom || "training");
+      setInfo("Resumed. Wait for her command.");
+      setupOpen = false;
+      refreshChrome();
+      if ((pausedFrom || "training") === "training") scheduleNextCommand(800);
+    }
     async function stopAll() {
       commandActive = false;
       clearTimeout(nextCommandTimer);
@@ -766,7 +827,10 @@
       await vibe(0);
       if (audio) { audio.pause(); audio = null; }
       hideReplyButtons();
-      setInfo("Stopped.");
+      setPhase("idle");
+      setInfo("Session ended.");
+      setupOpen = true;
+      refreshChrome();
       clearInterval(holdTimerInterval);
       document.getElementById("hold-timer").style.display = "none";
     }
@@ -953,23 +1017,9 @@
       }
     }
 
-    nose.addEventListener("touchstart", async e => {
-      e.preventDefault();
-      if (phase === "ending") {
-        isHolding = true;
-        await vibe(1);
-        return;
-      }
-      if (phase !== "training") return;
-      if (!commandActive || !challenge) {
-        setInfo("Wait for her command.");
-        await vibe(0);
-        return;
-      }
-      if ((challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
-        await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
-        return;
-      }
+    function beginHold() {
+      if (!commandActive || !challenge || phase !== "training") return;
+      holdArmed = true;
       isHolding = true;
       holdStart = Date.now();
       nose.classList.add("active");
@@ -984,47 +1034,98 @@
           if (Date.now() - lastCoach > 4200) {
             lastCoach = Date.now();
             if (Math.random() < 0.65) playPool("hold");
-            else speak(["Stay.", "Deeper.", "Don't come up.", "Good boy.", "Hold.", "Take it."][Math.floor(Math.random()*6)]);
           }
           if (dur >= challenge.secs) {
             isHolding = false;
+            holdArmed = false;
             nose.classList.remove("active");
             clearInterval(holdTick);
             winRound(dur, holdStart - commandIssuedAt);
           }
         }, 120);
       } else {
-        await vibe(vibePattern(repsDone + 0.4, vibeMode));
+        vibe(vibePattern(repsDone + 0.4, vibeMode));
       }
+    }
+
+    nose.addEventListener("touchstart", async e => {
+      e.preventDefault();
+      clearTimeout(bounceTimer);
+      bounceTimer = null;
+      if (phase === "ending") {
+        isHolding = true;
+        await vibe(1);
+        return;
+      }
+      if (phase !== "training") return;
+      if (!commandActive || !challenge) {
+        setInfo("Wait for her command.");
+        await vibe(0);
+        return;
+      }
+      if (bounceTimer && challenge && challenge.type === "hold" && holdArmed) {
+        clearTimeout(bounceTimer);
+        bounceTimer = null;
+        isHolding = true;
+        nose.classList.add("active");
+        return;
+      }
+      if (isHolding && holdArmed) return;
+      if ((challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
+        await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
+        return;
+      }
+      clearTimeout(armTimer);
+      armTimer = setTimeout(beginHold, ARM_MS);
     });
     nose.addEventListener("touchend", async e => {
       e.preventDefault();
+      if (armTimer) {
+        clearTimeout(armTimer);
+        armTimer = null;
+        return;
+      }
       if (!isHolding && phase !== "ending") {
         await vibe(0);
         return;
       }
-      const wasHolding = isHolding;
+      if (phase === "ending") {
+        isHolding = false;
+        await vibe(0);
+        return;
+      }
+      if (!commandActive || !challenge) {
+        isHolding = false;
+        holdArmed = false;
+        nose.classList.remove("active");
+        return;
+      }
+      if (challenge.type === "hold") {
+        bounceTimer = setTimeout(async () => {
+          if (isHolding) return;
+          const dur = (Date.now() - holdStart) / 1000;
+          holdArmed = false;
+          nose.classList.remove("active");
+          clearInterval(holdTick);
+          await vibe(0);
+          if (dur + 0.2 < challenge.secs) await failRound("You came off early. No vibration.");
+        }, BOUNCE_MS);
+        isHolding = false;
+        return;
+      }
+      const dur = (Date.now() - holdStart) / 1000;
       isHolding = false;
+      holdArmed = false;
       nose.classList.remove("active");
       clearInterval(holdTick);
       await vibe(0);
-      if (phase === "ending") return;
-      if (!wasHolding || !commandActive || !challenge) return;
-      const dur = (Date.now() - holdStart) / 1000;
-      if (challenge.type === "hold") {
-        if (dur + 0.15 < challenge.secs) await failRound("You came off early. No vibration.");
-        return;
-      }
+      if (dur < 0.35) return;
       if (dur < challenge.minDown) {
         await failRound("That wasn't all the way down.");
         return;
       }
       if (challenge.type === "reps" && dur > challenge.maxDown) {
         await failRound("Too slow. I wanted it fast.");
-        return;
-      }
-      if (challenge.type === "slow" && dur < challenge.minDown) {
-        await failRound("Too fast. Take it slow.");
         return;
       }
       repsDone += 1;
@@ -1137,7 +1238,10 @@
     window.testVibe = testVibe;
     window.enableMic = enableMic;
     window.stopAll = stopAll;
+    window.pauseSession = pauseSession;
+    window.resumeSession = resumeSession;
     window.changeSlaps = changeSlaps;
+    window.toggleSetup = toggleSetup;
   </script>
 </body>
 </html>
