@@ -360,6 +360,9 @@
     const BOUNCE_MS = 280;
     let letGoAllowed = false;
     let holdSeq = 0;
+    let lastContactAt = 0;
+    let capturedPointer = null;
+    let endingHold = false;
 
     function vibePattern(t, mode) {
       const climb = Math.min(1, 0.28 + t * 0.12);
@@ -1106,11 +1109,26 @@
       await play(keys[Math.min(repsDone, 2)]);
     }
 
+    function resetHoldVisual() {
+      isHolding = false;
+      holdArmed = false;
+      nose.classList.remove("active");
+      clearTimeout(armTimer);
+      armTimer = null;
+      clearInterval(holdTick);
+      if (capturedPointer != null) {
+        try { nose.releasePointerCapture(capturedPointer); } catch (e) {}
+        capturedPointer = null;
+      }
+    }
+
     function beginHold() {
       if (!commandActive || !challenge || phase !== "training") return;
       holdArmed = true;
       isHolding = true;
+      endingHold = false;
       holdStart = Date.now();
+      lastContactAt = Date.now();
       letGoAllowed = false;
       holdSeq += 1;
       const token = holdSeq;
@@ -1137,8 +1155,15 @@
       }
     }
 
-    nose.addEventListener("touchstart", async e => {
-      e.preventDefault();
+    async function onPress(e) {
+      endingHold = false;
+      lastContactAt = Date.now();
+      if (e && e.pointerId != null) {
+        try {
+          nose.setPointerCapture(e.pointerId);
+          capturedPointer = e.pointerId;
+        } catch (err) {}
+      }
       if (phase === "ending") {
         isHolding = true;
         await vibe(1);
@@ -1159,7 +1184,10 @@
           return;
         }
       }
-      if (isHolding && holdArmed && !letGoAllowed) return;
+      if (isHolding && holdArmed && !letGoAllowed) {
+        if (Date.now() - lastContactAt < 800 && Date.now() - holdStart < 12000) return;
+        resetHoldVisual();
+      }
       if (repsDone > 0 && (challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
         await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
         return;
@@ -1170,12 +1198,16 @@
       } else {
         beginHold();
       }
-    });
-    nose.addEventListener("touchend", async e => {
-      e.preventDefault();
+    }
+
+    async function onRelease() {
+      if (endingHold) return;
+      endingHold = true;
+      lastContactAt = 0;
       if (challenge && challenge.type === "hold" && armTimer) {
         clearTimeout(armTimer);
         armTimer = null;
+        resetHoldVisual();
         return;
       }
       if (armTimer) {
@@ -1183,64 +1215,48 @@
         armTimer = null;
       }
       if (!isHolding && phase !== "ending") {
+        resetHoldVisual();
         await vibe(0);
         return;
       }
       if (phase === "ending") {
-        isHolding = false;
+        resetHoldVisual();
         await vibe(0);
         return;
       }
       if (!commandActive || !challenge) {
-        isHolding = false;
-        holdArmed = false;
-        nose.classList.remove("active");
+        resetHoldVisual();
         return;
       }
       if (challenge.type === "hold") {
         if (letGoAllowed) {
           cancelHoldSeq();
-          isHolding = false;
-          holdArmed = false;
-          nose.classList.remove("active");
-          clearInterval(holdTick);
+          resetHoldVisual();
           await vibe(0);
           winRound((Date.now() - holdStart) / 1000, holdStart - commandIssuedAt);
           return;
         }
+        isHolding = false;
         bounceTimer = setTimeout(async () => {
           if (isHolding || letGoAllowed) return;
           cancelHoldSeq();
-          holdArmed = false;
-          nose.classList.remove("active");
-          clearInterval(holdTick);
+          resetHoldVisual();
           await vibe(0);
           await failRound("I didn't say let go.");
         }, BOUNCE_MS);
-        isHolding = false;
         return;
       }
       const dur = (Date.now() - holdStart) / 1000;
-      isHolding = false;
-      holdArmed = false;
-      nose.classList.remove("active");
-      clearInterval(holdTick);
+      resetHoldVisual();
       vibe(0);
       if (dur < 0.08) return;
       if (challenge.type === "slow" && !letGoAllowed) {
-        if (dur < 0.4) {
-          isHolding = false;
-          holdArmed = false;
-          nose.classList.remove("active");
-          return;
-        }
+        if (dur < 0.4) return;
         cancelHoldSeq();
         await failRound("I didn't say let go.");
         return;
       }
-      if (challenge.type === "slow") {
-        cancelHoldSeq();
-      }
+      if (challenge.type === "slow") cancelHoldSeq();
       if (challenge.type === "reps" && dur < challenge.minDown) return;
       if (challenge.type === "reps" && dur > challenge.maxDown) {
         await failRound("Too slow. I wanted it fast.");
@@ -1252,14 +1268,11 @@
       if (challenge.type === "slow") {
         vibe(0.85);
         setTimeout(() => vibe(0), 280);
-      } else {
-        vibe(0.75);
-        setTimeout(() => vibe(0), 90);
-      }
-      if (challenge.type === "slow") {
         if (repsDone >= challenge.count) winRound(repsDone, Date.now() - commandIssuedAt);
         return;
       }
+      vibe(0.75);
+      setTimeout(() => vibe(0), 90);
       const key = ["c1", "c2", "c3", "c4", "c5"][Math.min(repsDone - 1, 4)];
       if (repsDone >= challenge.count) {
         await play(key);
@@ -1267,18 +1280,29 @@
       } else {
         play(key);
       }
-    });
+    }
+
     nose.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchstart"));
+      e.preventDefault();
+      onPress(e);
     });
-    nose.addEventListener("pointerup", (e) => {
-      if (e.pointerType === "mouse") nose.dispatchEvent(new Event("touchend"));
+    nose.addEventListener("pointermove", (e) => {
+      if (e.buttons || e.pressure > 0 || isHolding) lastContactAt = Date.now();
     });
-    ["touchcancel", "pointercancel"].forEach(ev => {
-      nose.addEventListener(ev, () => {
-        if (isHolding || letGoAllowed) nose.dispatchEvent(new Event("touchend"));
-      });
-    });
+    function handlePointerEnd(e) {
+      if (e) e.preventDefault();
+      onRelease();
+    }
+    nose.addEventListener("pointerup", handlePointerEnd);
+    nose.addEventListener("pointercancel", handlePointerEnd);
+    document.addEventListener("pointerup", (e) => {
+      if (isHolding || holdArmed || armTimer) onRelease();
+    }, { passive: true });
+    setInterval(() => {
+      if (!isHolding && !holdArmed) return;
+      if (capturedPointer != null) return;
+      if (lastContactAt && Date.now() - lastContactAt > 500) onRelease();
+    }, 200);
     document.getElementById("dead-zone").addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 
     async function startSession() {
