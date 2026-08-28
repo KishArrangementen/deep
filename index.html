@@ -101,7 +101,7 @@
       position: absolute;
       left: 0;
       right: 0;
-      bottom: min(34vh, 188px);
+      bottom: calc(min(34vh, 200px) + 14px);
       display: grid;
       place-items: center;
       z-index: 8;
@@ -453,12 +453,39 @@
       };
       return true;
     }
+    function isBtMic(label) {
+      return /bluetooth|headset|hands[- ]?free|a2dp|hfp|sco|buds|airpods|wh-?\d/i.test(label || "");
+    }
+    async function pickPhoneMicId() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const mics = list.filter(d => d.kind === "audioinput");
+        const phone = mics.find(d => !isBtMic(d.label) && /built|intern|phone|microphone|mic/i.test(d.label))
+          || mics.find(d => !isBtMic(d.label));
+        if (phone) {
+          log("Mic: " + (phone.label || phone.deviceId.slice(0, 8)));
+          return phone.deviceId;
+        }
+        if (mics[0]) log("Mic fallback: " + mics[0].label);
+        return mics[0] && mics[0].deviceId;
+      } catch (e) {
+        return null;
+      }
+    }
+    async function phoneMicConstraints() {
+      const id = await pickPhoneMicId();
+      const base = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+      if (id) base.deviceId = { ideal: id };
+      return { audio: base };
+    }
     async function enableMic() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(t => t.stop());
+        if (micStream) micStream.getTracks().forEach(t => t.stop());
+        micStream = await navigator.mediaDevices.getUserMedia(await phoneMicConstraints());
         if (!recognition) initSpeech();
-        setInfo("Microphone ready.");
+        setInfo("Phone mic on. Bluetooth headset mic is skipped.");
+        startMic();
       } catch (e) {
         setInfo("Allow microphone access in the browser.");
       }
@@ -834,8 +861,10 @@
 
     async function startMic() {
       try {
-        if (micStream) return;
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }});
+        if (analyser) return;
+        if (!micStream) {
+          micStream = await navigator.mediaDevices.getUserMedia(await phoneMicConstraints());
+        }
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const source = ctx.createMediaStreamSource(micStream);
         analyser = ctx.createAnalyser();
