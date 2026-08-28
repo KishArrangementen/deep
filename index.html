@@ -678,9 +678,9 @@
       const conv = audioCtx.createConvolver();
       conv.buffer = makeImpulse(audioCtx);
       const wet = audioCtx.createGain();
-      wet.gain.value = 0.28;
+      wet.gain.value = 0.42;
       const dry = audioCtx.createGain();
-      dry.gain.value = 0.86;
+      dry.gain.value = 0.78;
       voiceGain.connect(dry).connect(audioCtx.destination);
       voiceGain.connect(conv).connect(wet).connect(audioCtx.destination);
       return audioCtx;
@@ -715,7 +715,12 @@
         duckBg(true);
         audio = new Audio(path);
         audio.preload = "auto";
-        const done = () => { duckBg(false); if (waitingFor) setTimeout(startListening, 200); resolve(); };
+        audio.crossOrigin = "anonymous";
+        try {
+          const src = audioCtx.createMediaElementSource(audio);
+          src.connect(voiceGain);
+        } catch (e) {}
+        const done = () => { duckBg(false); if (waitingFor) setTimeout(startListening, 250); resolve(); };
         audio.onended = done;
         audio.onerror = () => { log("FAILED " + path); done(); };
         audio.play().catch((e) => { log("Play error " + e.message); done(); });
@@ -858,7 +863,7 @@
       const spike = highEnergy - prevEnergy;
       prevEnergy = highEnergy * 0.7 + prevEnergy * 0.3;
       const now = Date.now();
-      if (phase === "training" && isHolding && highEnergy > 36 && spike > 10 && now - lastChokeLine > 4500) {
+      if (phase === "training" && isHolding && highEnergy > 36 && spike > 10 && now - lastChokeLine > 12000) {
         lastChokeLine = now;
         playPool("choke");
       }
@@ -878,7 +883,7 @@
             setPhase("training");
             setInfo(vibeBan > 0 ? "No vibration for the next commands. Wait." : "Wait for her command.");
             slapCount = 0;
-            scheduleNextCommand(1200);
+            scheduleNextCommand(3500);
           });
         }
       }
@@ -906,7 +911,6 @@
       challenge = nextChallenge();
       repsDone = 0;
       lastRepAt = 0;
-      commandActive = true;
       commandIssuedAt = Date.now();
       round += 1;
       targetHold = challenge.secs || targetHold;
@@ -917,22 +921,7 @@
       if (challenge.type === "hold") timerEl.textContent = "0 / " + challenge.secs + "s";
       else timerEl.textContent = "0 / " + challenge.count;
       await playFile(lastCommandFile);
-      if (challenge.type === "hold") await playFile(12);
-      else if (challenge.type === "reps") await playFile(89);
-      else if (challenge.type === "slow") await playFile(90);
-      if (vibeMode === "pulse") await playFile(140);
-      if (vibeMode === "wave") await playFile(141);
-      if (vibeMode === "heartbeat") await playFile(142);
-      if (vibeMode === "stagger") await playFile(143);
-      if (vibeMode === "rise") await playFile(138);
-      const elapsed = Date.now() - sessionStart;
-      if (elapsed - lastTimeCall > 4 * 60 * 1000) {
-        lastTimeCall = elapsed;
-        playPool("progress");
-        if (elapsed > 40 * 60 * 1000) await playFile(128);
-        else if (elapsed > 20 * 60 * 1000) await playFile(127);
-        else await playFile(126);
-      }
+      commandActive = true;
     }
 
     function scheduleNextCommand(delay) {
@@ -967,14 +956,14 @@
           await play("backon");
           setPhase("training");
           setInfo(vibeBan ? "Toy stays quiet. Wait for her." : "Wait for her command.");
-          scheduleNextCommand(1000);
+          scheduleNextCommand(3500);
         }, 6000);
       } else if (punishKind === "silent") {
         vibeBan = 2;
         tell(reason + " No vibration for 2 commands.");
         await play("dontfail");
         setPhase("training");
-        scheduleNextCommand(1200);
+        scheduleNextCommand(3500);
       } else if (punishKind === "slaps+nipples") {
         tell(reason + " Slaps first. Then nipples.");
         await play("slap");
@@ -990,7 +979,7 @@
           await play("backon");
           setPhase("training");
           setInfo("No vibe for 2 commands. Wait.");
-          scheduleNextCommand(1000);
+          scheduleNextCommand(3500);
         }, 5500);
       }
     }
@@ -1013,7 +1002,7 @@
       checkProgress();
       if (phase === "training") {
         targetHold = Math.min(10, targetHold + (round % 2 === 0 ? 1 : 0));
-        scheduleNextCommand(900);
+        scheduleNextCommand(4200);
       }
     }
 
@@ -1031,9 +1020,9 @@
           const dur = (Date.now() - holdStart) / 1000;
           timerEl.textContent = dur.toFixed(1) + " / " + challenge.secs + "s";
           await vibe(vibePattern(dur, vibeMode));
-          if (Date.now() - lastCoach > 4200) {
+          if (Date.now() - lastCoach > 9000) {
             lastCoach = Date.now();
-            if (Math.random() < 0.65) playPool("hold");
+            if (Math.random() < 0.35) playPool("hold");
           }
           if (dur >= challenge.secs) {
             isHolding = false;
@@ -1160,11 +1149,6 @@
       lastTimeCall = 0;
       await play("look");
       await play("hoodAsk");
-      speak("Is your latex hood on? Blindfold tight? Say yes, mistress.");
-      await play("lube");
-      await play("listenOnly");
-      await play("sayYes");
-      speak("Say yes, mistress.");
       showReplyButtons("yes");
       startMic();
     }
@@ -1176,35 +1160,25 @@
       setInfo("");
       if (type === "yes") {
         await play("goodboy");
-        await play("putin");
-        await play("toyIn");
-        speak("Is that toy in your ass, slut? Say it is in.");
+        await play("lube");
         showReplyButtons("in");
       } else if (type === "in") {
         await play("thankyou");
-        await play("whatSay");
-        await play("sayThanks");
-        speak("What do you say to your mistress? Say thank you, mistress.");
         showReplyButtons("thanks");
       } else if (type === "thanks") {
         await play("welcome");
         await play("expectations");
-        await play("answerOut");
-        await play("onButton");
-        await play("ifYouFail");
-        await play("handsOff");
         await play("begin");
         setPhase("training");
         targetHold = 3;
         round = 0;
         sessionStart = Date.now();
-        speak("Sixty minutes. When I say on it, stay down.");
-        scheduleNextCommand(900);
+        scheduleNextCommand(3500);
       }
       replyLock = false;
     }
     function checkProgress() {
-      if (phase === "training" && Math.random() < 0.35) playPool("progress");
+      if (phase === "training" && score > 0 && score % 40 === 0) playPool("progress");
       const longEnough = sessionStart && Date.now() - sessionStart >= SESSION_MS - 180000;
       const mustEnd = sessionStart && Date.now() - sessionStart >= SESSION_MS;
       if (phase === "training" && (mustEnd || (longEnough && score >= 70))) {
