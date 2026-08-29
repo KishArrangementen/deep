@@ -99,11 +99,10 @@
 
     .target-wrap {
       position: absolute;
-      left: 10%;
-      right: 10%;
-      top: 16%;
-      height: 28vh;
-      min-height: 180px;
+      left: 0;
+      right: 0;
+      top: 8%;
+      bottom: min(34vh, 200px);
       display: grid;
       place-items: center;
       z-index: 8;
@@ -111,8 +110,8 @@
     }
     .target-wrap #nose-btn { pointer-events: auto; }
     #nose-btn {
-      width: min(176px, 48vw);
-      height: min(176px, 48vw);
+      width: min(240px, 72vw);
+      height: min(240px, 72vw);
       border-radius: 50%;
       border: 1px solid rgba(232,180,180,0.28);
       background:
@@ -327,6 +326,7 @@
     let lastContactAt = 0;
     let capturedPointer = null;
     let endingHold = false;
+    let countRunning = false;
 
     function vibePattern(t, mode) {
       const climb = Math.min(1, 0.28 + t * 0.12);
@@ -933,6 +933,7 @@
       if (phase !== "training") return;
       winLock = false;
       endingHold = false;
+      countRunning = false;
       resetHoldVisual();
       challenge = nextChallenge();
       repsDone = 0;
@@ -969,6 +970,7 @@
       isHolding = false;
       holdArmed = false;
       letGoAllowed = false;
+      countRunning = false;
       holdSeq += 1;
       nose.classList.remove("active");
       clearInterval(holdTick);
@@ -1033,6 +1035,7 @@
       holdArmed = false;
       letGoAllowed = false;
       endingHold = false;
+      countRunning = false;
       holdSeq += 1;
       nose.classList.remove("active");
       clearInterval(holdTick);
@@ -1059,20 +1062,21 @@
     function cancelHoldSeq() {
       holdSeq += 1;
       letGoAllowed = false;
+      countRunning = false;
     }
 
     async function runHoldCount(secs, token) {
       secs = Math.min(5, Math.max(3, secs || 3));
       await play("holdNow");
-      if (token !== holdSeq || !isHolding || !commandActive) return;
+      if (token !== holdSeq || !commandActive) return;
       const keys = ["c1", "c2", "c3", "c4", "c5"];
       for (let i = 1; i <= secs; i++) {
-        await wait(1100);
-        if (token !== holdSeq || !isHolding || !commandActive) return;
+        await wait(900);
+        if (token !== holdSeq || !commandActive) return;
         timerEl.textContent = i + " / " + secs;
         if (keys[i - 1]) await play(keys[i - 1]);
       }
-      if (token !== holdSeq || !isHolding || !commandActive) return;
+      if (token !== holdSeq || !commandActive) return;
       letGoAllowed = true;
       holdArmed = false;
       await play("comeUp");
@@ -1084,9 +1088,9 @@
 
     async function runSlowHold(token) {
       await play("holdNow");
-      if (token !== holdSeq || !isHolding || !commandActive) return;
+      if (token !== holdSeq || !commandActive) return;
       await wait(2300 + repsDone * 250);
-      if (token !== holdSeq || !isHolding || !commandActive) return;
+      if (token !== holdSeq || !commandActive) return;
       letGoAllowed = true;
       holdArmed = false;
       const keys = ["slow1", "slow2", "slow3"];
@@ -1116,9 +1120,17 @@
 
     function beginHold() {
       if (!commandActive || !challenge || phase !== "training") return;
+      if (countRunning) {
+        isHolding = true;
+        holdArmed = true;
+        endingHold = false;
+        nose.classList.add("active");
+        return;
+      }
       holdArmed = true;
       isHolding = true;
       endingHold = false;
+      countRunning = true;
       holdStart = Date.now();
       lastContactAt = Date.now();
       letGoAllowed = false;
@@ -1149,10 +1161,19 @@
 
     let lastPressAt = 0;
     async function onPress(e) {
-      if (Date.now() - lastPressAt < 90 && (isHolding || holdArmed || armTimer)) return;
-      lastPressAt = Date.now();
-      endingHold = false;
       lastContactAt = Date.now();
+      endingHold = false;
+      if (bounceTimer) {
+        clearTimeout(bounceTimer);
+        bounceTimer = null;
+      }
+      if (countRunning || isHolding || holdArmed) {
+        isHolding = true;
+        holdArmed = true;
+        if (nose) nose.classList.add("active");
+        return;
+      }
+      lastPressAt = Date.now();
       if (e && e.pointerId != null) {
         try {
           nose.setPointerCapture(e.pointerId);
@@ -1170,33 +1191,20 @@
         await vibe(0);
         return;
       }
-      if (bounceTimer) {
-        clearTimeout(bounceTimer);
-        bounceTimer = null;
-        if (challenge.type === "hold" && (holdArmed || letGoAllowed)) {
-          isHolding = true;
-          nose.classList.add("active");
-          return;
-        }
-      }
-      if (isHolding && holdArmed && !letGoAllowed) {
-        if (Date.now() - lastContactAt < 800 && Date.now() - holdStart < 12000) return;
-        resetHoldVisual();
-      }
       if (repsDone > 0 && (challenge.type === "reps" || challenge.type === "slow") && lastRepAt && Date.now() - lastRepAt > challenge.maxGap) {
         await failRound(challenge.type === "slow" ? "Too much space. Keep the rhythm." : "Too slow. I wanted it fast.");
         return;
       }
-      clearTimeout(armTimer);
-      if (challenge.type === "hold") {
-        armTimer = setTimeout(beginHold, ARM_MS);
-      } else {
-        beginHold();
-      }
+      beginHold();
     }
 
     async function onRelease(e) {
       if (e && capturedPointer != null && e.pointerId != null && e.pointerId !== capturedPointer) return;
+      if (challenge && (challenge.type === "hold" || challenge.type === "slow") && !letGoAllowed && commandActive) {
+        lastContactAt = Date.now();
+        endingHold = false;
+        return;
+      }
       if (Date.now() - lastPressAt < 160 && challenge && challenge.type !== "reps") {
         lastContactAt = Date.now();
         return;
@@ -1301,6 +1309,7 @@
     bindPress(nose);
     bindPress(hit);
     setInterval(() => {
+      if (challenge && challenge.type === "hold") return;
       if (!isHolding && !holdArmed) return;
       if (lastContactAt && Date.now() - lastContactAt > 1400) onRelease({});
     }, 250);
