@@ -1195,7 +1195,12 @@
       }
     }
 
-    async function onRelease() {
+    async function onRelease(e) {
+      if (e && capturedPointer != null && e.pointerId != null && e.pointerId !== capturedPointer) return;
+      if (Date.now() - lastPressAt < 160 && challenge && challenge.type !== "reps") {
+        lastContactAt = Date.now();
+        return;
+      }
       if (endingHold) return;
       endingHold = true;
       lastContactAt = 0;
@@ -1277,57 +1282,28 @@
       }
     }
 
-    nose.addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      onPress(e);
-    });
-    nose.addEventListener("pointermove", (e) => {
-      if (e.buttons || e.pressure > 0 || isHolding) lastContactAt = Date.now();
-    });
-    function handlePointerEnd(e) {
-      if (e) e.preventDefault();
-      onRelease();
-    }
-    nose.addEventListener("pointerup", handlePointerEnd);
-    nose.addEventListener("pointercancel", handlePointerEnd);
-    nose.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      lastContactAt = Date.now();
-      onPress(e.changedTouches ? e.changedTouches[0] : e);
-    }, { passive: false });
-    nose.addEventListener("touchend", (e) => {
-      e.preventDefault();
-      onRelease();
-    }, { passive: false });
-    nose.addEventListener("touchcancel", (e) => {
-      e.preventDefault();
-      onRelease();
-    }, { passive: false });
-    nose.addEventListener("click", () => {
-      if (!commandActive || isHolding) return;
-      lastContactAt = Date.now();
-      onPress({});
-    });
     const hit = document.querySelector(".target-wrap");
-    ["pointerdown", "touchstart"].forEach(ev => {
-      hit.addEventListener(ev, (e) => {
-        if (e.target === nose) return;
+    function bindPress(el) {
+      el.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        lastContactAt = Date.now();
-        onPress(e.changedTouches ? e.changedTouches[0] : e);
-      }, { passive: false });
-    });
-    ["pointerup", "pointercancel", "touchend", "touchcancel"].forEach(ev => {
-      hit.addEventListener(ev, (e) => {
-        if (e.target === nose) return;
-        onRelease();
+        e.stopPropagation();
+        onPress(e);
       });
-    });
+      el.addEventListener("pointermove", (e) => {
+        if (isHolding || holdArmed) lastContactAt = Date.now();
+      });
+      el.addEventListener("pointerup", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onRelease(e);
+      });
+    }
+    bindPress(nose);
+    bindPress(hit);
     setInterval(() => {
       if (!isHolding && !holdArmed) return;
-      if (capturedPointer != null) return;
-      if (lastContactAt && Date.now() - lastContactAt > 900) onRelease();
-    }, 200);
+      if (lastContactAt && Date.now() - lastContactAt > 1400) onRelease({});
+    }, 250);
     document.getElementById("dead-zone").addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 
     async function startSession() {
