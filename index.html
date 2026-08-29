@@ -99,19 +99,20 @@
 
     .target-wrap {
       position: absolute;
-      left: 0;
-      right: 0;
-      top: 22%;
-      bottom: auto;
+      left: 10%;
+      right: 10%;
+      top: 16%;
+      height: 28vh;
+      min-height: 180px;
       display: grid;
       place-items: center;
       z-index: 8;
-      pointer-events: none;
+      pointer-events: auto;
     }
     .target-wrap #nose-btn { pointer-events: auto; }
     #nose-btn {
-      width: min(132px, 36vw);
-      height: min(132px, 36vw);
+      width: min(176px, 48vw);
+      height: min(176px, 48vw);
       border-radius: 50%;
       border: 1px solid rgba(232,180,180,0.28);
       background:
@@ -319,8 +320,8 @@
     let holdArmed = false;
     let armTimer = null;
     let bounceTimer = null;
-    const ARM_MS = 180;
-    const BOUNCE_MS = 280;
+    const ARM_MS = 40;
+    const BOUNCE_MS = 450;
     let letGoAllowed = false;
     let holdSeq = 0;
     let lastContactAt = 0;
@@ -919,8 +920,8 @@
       const hold = Math.min(5, 3 + Math.floor(round / 4));
       const deck = [
         { type: "hold", secs: hold, files: [11, 21, 22, 13, 92], info: `Stay down ${hold}s. Don't come up.` },
-        { type: "reps", count: 5, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [87, 88, 89, 9], info: "5 deepthroats. Nose on, off. That's one." },
-        { type: "reps", count: 4, maxGap: 2200, minDown: 0.08, maxDown: 2.8, files: [109, 95], info: "4 quick ones. Down and off each time." },
+        { type: "reps", count: 5, maxGap: 2600, minDown: 0.05, maxDown: 3.2, files: [87, 88, 89, 9], info: "5 deepthroats. Nose on, off. That's one." },
+        { type: "reps", count: 4, maxGap: 2600, minDown: 0.05, maxDown: 3.2, files: [109, 95], info: "4 quick ones. Down and off each time." },
         { type: "slow", count: 3, maxGap: 7000, minDown: 0.7, maxDown: 5, files: [90, 91, 18], info: "3 slow ones. Down, stay, off." },
         { type: "hold", secs: hold, files: [12, 93, 135], info: `Hold through the count. ${hold}s.` }
       ];
@@ -1307,10 +1308,25 @@
       lastContactAt = Date.now();
       onPress({});
     });
+    const hit = document.querySelector(".target-wrap");
+    ["pointerdown", "touchstart"].forEach(ev => {
+      hit.addEventListener(ev, (e) => {
+        if (e.target === nose) return;
+        e.preventDefault();
+        lastContactAt = Date.now();
+        onPress(e.changedTouches ? e.changedTouches[0] : e);
+      }, { passive: false });
+    });
+    ["pointerup", "pointercancel", "touchend", "touchcancel"].forEach(ev => {
+      hit.addEventListener(ev, (e) => {
+        if (e.target === nose) return;
+        onRelease();
+      });
+    });
     setInterval(() => {
       if (!isHolding && !holdArmed) return;
       if (capturedPointer != null) return;
-      if (lastContactAt && Date.now() - lastContactAt > 500) onRelease();
+      if (lastContactAt && Date.now() - lastContactAt > 900) onRelease();
     }, 200);
     document.getElementById("dead-zone").addEventListener("touchstart", e => e.preventDefault(), { passive: false });
 
